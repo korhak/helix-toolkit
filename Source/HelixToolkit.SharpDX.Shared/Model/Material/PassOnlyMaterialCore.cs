@@ -2,89 +2,63 @@
 The MIT License (MIT)
 Copyright (c) 2018 Helix Toolkit contributors
 */
-using System;
 #if !NETFX_CORE
-namespace HelixToolkit.Wpf.SharpDX.Model
+namespace HelixToolkit.Wpf.SharpDX
 #else
-namespace HelixToolkit.UWP.Model
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
+namespace HelixToolkit.UWP
+#endif
 #endif
 {
-    using Core;
-    using Render;
-    using Shaders;
-    /// <summary>
-    /// 
-    /// </summary>
-    public sealed class NormalMaterialCore : MaterialCore
+    namespace Model
     {
-        public static readonly NormalMaterialCore Core = new NormalMaterialCore();
-
-        public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
+        /// <summary>
+        /// 
+        /// </summary>
+        public sealed class NormalMaterialCore : MaterialCore
         {
-            return new PassOnlyMaterialVariable(DefaultPassNames.Normals, technique);
+            public static readonly NormalMaterialCore Core = new NormalMaterialCore();
+
+            public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
+            {
+                return new PassOnlyMaterialVariable(DefaultPassNames.Normals, technique);
+            }
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        public sealed class ColorMaterialCore : MaterialCore
+        {
+            public static readonly ColorMaterialCore Core = new ColorMaterialCore();
+            public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
+            {
+                return new PassOnlyMaterialVariable(DefaultPassNames.Colors, technique);
+            }
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        public sealed class PositionMaterialCore : MaterialCore
+        {
+            public static readonly PositionMaterialCore Core = new PositionMaterialCore();
+            public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
+            {
+                return new PassOnlyMaterialVariable(DefaultPassNames.Positions, technique);
+            }
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        public sealed class NormalVectorMaterialCore : MaterialCore
+        {
+            public static readonly NormalVectorMaterialCore Core = new NormalVectorMaterialCore();
+            public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
+            {
+                return new PassOnlyMaterialVariable(DefaultPassNames.NormalVector, technique);
+            }
         }
     }
-    /// <summary>
-    /// 
-    /// </summary>
-    public sealed class ColorMaterialCore : MaterialCore
-    {
-        public static readonly ColorMaterialCore Core = new ColorMaterialCore();
-        public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
-        {
-            return new PassOnlyMaterialVariable(DefaultPassNames.Colors, technique);
-        }
-    }
-    /// <summary>
-    /// 
-    /// </summary>
-    public sealed class PositionMaterialCore : MaterialCore
-    {
-        public static readonly PositionMaterialCore Core = new PositionMaterialCore();
-        public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
-        {
-            return new PassOnlyMaterialVariable(DefaultPassNames.Positions, technique);
-        }
-    }
-    /// <summary>
-    /// 
-    /// </summary>
-    public sealed class NormalVectorMaterialCore : MaterialCore
-    {
-        public static readonly NormalVectorMaterialCore Core = new NormalVectorMaterialCore();
-        public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
-        {
-            return new PassOnlyMaterialVariable(DefaultPassNames.NormalVector, technique);
-        }
-    }
-    /// <summary>
-    /// 
-    /// </summary>
-    public sealed class PassOnlyMaterialVariable : MaterialVariable
-    {
-        public ShaderPass MaterialPass { private set; get; }
 
-        public override string DefaultShaderPassName { set; get; }
-
-        private readonly string passName;
-        public PassOnlyMaterialVariable(string passName, IRenderTechnique technique) : base(null, technique)
-        {
-            this.passName = passName;
-            MaterialPass = technique[passName];
-        }
-
-        protected override bool OnBindMaterialTextures(DeviceContextProxy context, ShaderPass shaderPass)
-        {
-            return true;
-        }
-
-        public override ShaderPass GetPass(MaterialGeometryRenderCore core, RenderContext context)
-        {
-            return MaterialPass;
-        }
-
-        protected override void AssignVariables(ref ModelStruct model)
-        {
-        }
-    }
 }

@@ -76,6 +76,14 @@ namespace HelixToolkit.Wpf.SharpDX
             remove { this.RemoveHandler(WinformHostExtend.FormMouseMoveEvent, value); }
         }
         /// <summary>
+        /// Occurs when [form mouse wheel].
+        /// </summary>
+        public event WinformHostExtend.FormMouseWheelEventHandler FormMouseWheel
+        {
+            add { this.AddHandler(WinformHostExtend.FormMouseWheelEvent, value); }
+            remove { this.RemoveHandler(WinformHostExtend.FormMouseWheelEvent, value); }
+        }
+        /// <summary>
         /// The camera inertia factor property.
         /// </summary>
         public static readonly DependencyProperty CameraInertiaFactorProperty = DependencyProperty.Register(
@@ -305,13 +313,6 @@ namespace HelixToolkit.Wpf.SharpDX
         /// </summary>
         public static DependencyProperty RenderExceptionProperty = DependencyProperty.Register(
             "RenderException", typeof(Exception), typeof(Viewport3DX), new PropertyMetadata(null));
-
-        /// <summary>
-        /// The Render Technique property
-        /// </summary>
-        public static readonly DependencyProperty RenderTechniqueProperty = DependencyProperty.Register(
-            "RenderTechnique", typeof(IRenderTechnique), typeof(Viewport3DX), new PropertyMetadata(null,
-                (s, e) => ((Viewport3DX)s).RenderTechniquePropertyChanged(e.NewValue as IRenderTechnique)));
 
         ///// <summary>
         ///// The is deferred shading enabled propery
@@ -1106,6 +1107,63 @@ namespace HelixToolkit.Wpf.SharpDX
                     }
                 }));
 
+        /// <summary>
+        /// The enable ssao property
+        /// </summary>
+        public static readonly DependencyProperty EnableSSAOProperty =
+            DependencyProperty.Register("EnableSSAO", typeof(bool), typeof(Viewport3DX), new PropertyMetadata(false,
+                (d,e)=> 
+                {
+                    var viewport = d as Viewport3DX;
+                    if (viewport.renderHostInternal != null)
+                    {
+                        viewport.renderHostInternal.RenderConfiguration.EnableSSAO = (bool)e.NewValue;
+                        viewport.renderHostInternal.InvalidateRender();
+                    }
+                }));
+
+
+        /// <summary>
+        /// The ssao sampling radius property
+        /// </summary>
+        public static readonly DependencyProperty SSAOSamplingRadiusProperty =
+            DependencyProperty.Register("SSAOSamplingRadius", typeof(double), typeof(Viewport3DX), 
+                new PropertyMetadata(0.5, (d,e)=> 
+                {
+                    var viewport = d as Viewport3DX;
+                    if (viewport.renderHostInternal != null)
+                    {
+                        viewport.renderHostInternal.RenderConfiguration.SSAORadius =(float)(double)e.NewValue;
+                        viewport.renderHostInternal.InvalidateRender();
+                    }
+                }));
+
+        public static readonly DependencyProperty SSAOIntensityProperty =
+            DependencyProperty.Register("SSAOIntensity", typeof(double), typeof(Viewport3DX), new PropertyMetadata(1.0, (d, e)=> 
+                {
+                    var viewport = d as Viewport3DX;
+                    if (viewport.renderHostInternal != null)
+                    {
+                        viewport.renderHostInternal.RenderConfiguration.SSAOIntensity =(float) (double) e.NewValue;
+                        viewport.renderHostInternal.InvalidateRender();
+                    }
+                }));
+
+        /// <summary>
+        /// The ssao quality property
+        /// </summary>
+        public static readonly DependencyProperty SSAOQualityProperty =
+            DependencyProperty.Register("SSAOQuality", typeof(SSAOQuality), typeof(Viewport3DX), new PropertyMetadata(SSAOQuality.Low, (d, e) =>
+            {
+                var viewport = d as Viewport3DX;
+                if (viewport.renderHostInternal != null)
+                {
+                    viewport.renderHostInternal.RenderConfiguration.SSAOQuality = (SSAOQuality)e.NewValue;
+                    viewport.renderHostInternal.InvalidateRender();
+                }
+            }));
+
+
 
         /// <summary>
         /// Background Color
@@ -1598,17 +1656,6 @@ namespace HelixToolkit.Wpf.SharpDX
         /// The render host internal.
         /// </value>
         protected IRenderHost renderHostInternal;
-        /// <summary>
-        /// Gets or sets value for the shading model shading is used
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if deferred shading is enabled; otherwise, <c>false</c>.
-        /// </value>
-        public IRenderTechnique RenderTechnique
-        {
-            get { return (IRenderTechnique)this.GetValue(RenderTechniqueProperty); }
-            set { this.SetValue(RenderTechniqueProperty, value); }
-        }
 
         ///// <summary>
         ///// Gets or sets a value indicating whether deferred shading is used
@@ -2884,6 +2931,55 @@ namespace HelixToolkit.Wpf.SharpDX
         {
             get { return (bool)GetValue(EnableRenderOrderProperty); }
             set { SetValue(EnableRenderOrderProperty, value); }
+        }
+
+
+        /// <summary>
+        /// Gets or sets a value indicating whether [enable ScreenSpaced Ambient Occlusion].
+        /// </summary>
+        /// <value>
+        ///   <c>true</c> if [enable ssao]; otherwise, <c>false</c>.
+        /// </value>
+        public bool EnableSSAO
+        {
+            get { return (bool)GetValue(EnableSSAOProperty); }
+            set { SetValue(EnableSSAOProperty, value); }
+        }
+        /// <summary>
+        /// Gets or sets the ssao sampling radius.
+        /// </summary>
+        /// <value>
+        /// The ssao sampling radius.
+        /// </value>
+        public double SSAOSamplingRadius
+        {
+            get { return (double)GetValue(SSAOSamplingRadiusProperty); }
+            set { SetValue(SSAOSamplingRadiusProperty, value); }
+        }
+
+        /// <summary>
+        /// Gets or sets the ssao intensity.
+        /// </summary>
+        /// <value>
+        /// The ssao intensity.
+        /// </value>
+        public double SSAOIntensity
+        {
+            get { return (double)GetValue(SSAOIntensityProperty); }
+            set { SetValue(SSAOIntensityProperty, value); }
+        }
+
+
+        /// <summary>
+        /// Gets or sets the ssao quality.
+        /// </summary>
+        /// <value>
+        /// The ssao quality.
+        /// </value>
+        public SSAOQuality SSAOQuality
+        {
+            get { return (SSAOQuality)GetValue(SSAOQualityProperty); }
+            set { SetValue(SSAOQualityProperty, value); }
         }
     }
 }

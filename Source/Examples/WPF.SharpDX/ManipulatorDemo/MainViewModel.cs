@@ -57,7 +57,6 @@ namespace ManipulatorDemo
         public MainViewModel()
         {
             EffectsManager = new DefaultEffectsManager();
-            RenderTechnique = EffectsManager[DefaultRenderTechniqueNames.Blinn];
 
             this.Title = "Manipulator Demo";
             this.SubTitle = null;
@@ -119,8 +118,9 @@ namespace ManipulatorDemo
             if(e.HitTestResult != null && e.HitTestResult.ModelHit is MeshGeometryModel3D m && (m.Geometry == Model || m.Geometry == Model2))
             {
                 Target = null;
+                CenterOffset = m.Geometry.Bound.Center; // Must update this before updating target
                 Target = e.HitTestResult.ModelHit as Element3D;
-                CenterOffset = m.Geometry.Bound.Center;
+                
             }
         }
 

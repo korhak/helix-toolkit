@@ -3,20 +3,21 @@ The MIT License (MIT)
 Copyright (c) 2018 Helix Toolkit contributors
 */
 using SharpDX;
-using SharpDX.DirectWrite;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
-using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-#if NETFX_CORE
-namespace HelixToolkit.UWP
-#else
+#if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
+#else
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
+namespace HelixToolkit.UWP
+#endif
 #endif
 {
     /// <summary>
@@ -234,11 +235,14 @@ namespace HelixToolkit.Wpf.SharpDX
 
         internal static object GetNamedColor(string name)
         {
-            object color;
-            // First, check to see if this is a standard name.
-            //
-            Colors.TryGetValue(name, out color);
+            Colors.TryGetValue(name, out object color);
             return color;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Color4 ChangeIntensity(this Color4 c, float intensity)
+        {
+            return new Color4(c.Red * intensity, c.Green * intensity, c.Blue * intensity, c.Alpha);
         }
     }
 }

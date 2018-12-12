@@ -20,7 +20,9 @@ namespace HelixToolkit.Wpf.SharpDX
 {
     using Model.Scene;
     using System;
+    using System.ComponentModel;
     using System.Diagnostics;
+    using Utilities;
 
     public class TransformManipulator3D : GroupElement3D
     {
@@ -123,7 +125,9 @@ namespace HelixToolkit.Wpf.SharpDX
             }));
 
 
-
+#if !NETFX_CORE
+        [TypeConverter(typeof(Vector3Converter))]
+#endif
         public Vector3 CenterOffset
         {
             get { return (Vector3)GetValue(CenterOffsetProperty); }
@@ -302,8 +306,8 @@ namespace HelixToolkit.Wpf.SharpDX
             };
             (xrayEffect.SceneNode as NodePostEffectXRayGrid).XRayDrawingPassName = DefaultPassNames.EffectMeshDiffuseXRayGridP3;
             Children.Add(xrayEffect);
-            SceneNode.OnAttached += SceneNode_OnAttached;
-            SceneNode.OnDetached += SceneNode_OnDetached;
+            SceneNode.Attached += SceneNode_OnAttached;
+            SceneNode.Detached += SceneNode_OnDetached;
         }
 
         private void SceneNode_OnDetached(object sender, EventArgs e)
@@ -621,7 +625,15 @@ namespace HelixToolkit.Wpf.SharpDX
             m.Decompose(out Vector3 scale, out Quaternion rotation, out Vector3 translation);
             scaleMatrix = Matrix.Scaling(scale);
             rotationMatrix = Matrix.RotationQuaternion(rotation);
-            translationVector = translation;
+            if (centerOffset != Vector3.Zero)
+            {
+                var org = Matrix.Translation(-centerOffset) * scaleMatrix * rotationMatrix * Matrix.Translation(centerOffset);
+                translationVector = translation - org.TranslationVector;
+            }
+            else
+            {
+                translationVector = m.TranslationVector;
+            }
             OnUpdateSelfTransform();
             //OnUpdateTargetMatrix();
         }

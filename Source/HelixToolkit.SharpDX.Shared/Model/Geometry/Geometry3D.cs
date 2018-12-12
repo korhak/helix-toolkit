@@ -2,18 +2,24 @@
 The MIT License (MIT)
 Copyright (c) 2018 Helix Toolkit contributors
 */
-#if NETFX_CORE
-namespace HelixToolkit.UWP
-#else
+using System;
+using global::SharpDX;
+using System.Runtime.Serialization;
+using System.Collections.Generic;
+#if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
+#else
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
+namespace HelixToolkit.UWP
+#endif
 #endif
 {
-    using System;
-    using global::SharpDX;
+
     using Core;
     using Model;
-    using System.Runtime.Serialization;
-    using System.Collections.Generic;
+
 
 #if !NETFX_CORE
     [Serializable]
@@ -318,9 +324,10 @@ namespace HelixToolkit.Wpf.SharpDX
                 Bound = BoundingBoxExtensions.FromPoints(Positions);
                 BoundingSphere = BoundingSphereExtensions.FromPoints(Positions);
             }
-            if(Bound.Maximum.IsUndefined() || Bound.Minimum.IsUndefined() || BoundingSphere.Center.IsUndefined())
+            if(Bound.Maximum.IsUndefined() || Bound.Minimum.IsUndefined() || BoundingSphere.Center.IsUndefined()
+                || float.IsInfinity(Bound.Center.X) || float.IsInfinity(Bound.Center.Y) || float.IsInfinity(Bound.Center.Z))
             {
-                throw new Exception("Position vertex contains invalid value(Example: Float.NaN).");
+                throw new Exception("Position vertex contains invalid value(Example: Float.NaN, Float.Infinity).");
             }
         }
 

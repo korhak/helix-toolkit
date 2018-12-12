@@ -14,6 +14,8 @@ namespace HelixToolkit.Wpf.SharpDX
     using Model;
     using Shaders;
     using System.Collections.Generic;
+    using System.ComponentModel;
+    using Utilities;
 
     /// <summary>
     /// 
@@ -34,6 +36,9 @@ namespace HelixToolkit.Wpf.SharpDX
         /// <summary>
         /// Gets or sets the diffuse color for the material.
         /// </summary>
+#if !NETFX_CORE
+        [TypeConverter(typeof(Color4Converter))]
+#endif
         public Color4 DiffuseColor
         {
             get { return (Color4)this.GetValue(DiffuseColorProperty); }
@@ -148,5 +153,21 @@ namespace HelixToolkit.Wpf.SharpDX
                 ColorStripeYEnabled = ColorStripeYEnabled
             };
         }
+
+#if !NETFX_CORE
+        protected override Freezable CreateInstanceCore()
+        {
+            return new ColorStripeMaterial()
+            {
+                DiffuseColor = DiffuseColor,
+                ColorStripeSampler = ColorStripeSampler,
+                ColorStripeX = ColorStripeX,
+                ColorStripeXEnabled = ColorStripeXEnabled,
+                ColorStripeY = ColorStripeY,
+                ColorStripeYEnabled = ColorStripeYEnabled,
+                Name = Name
+            };
+        }
+#endif
     }
 }

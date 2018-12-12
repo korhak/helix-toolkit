@@ -9,7 +9,11 @@ using System;
 #if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
 #else
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
 namespace HelixToolkit.UWP
+#endif
 #endif
 {
     using Render;
@@ -68,8 +72,8 @@ namespace HelixToolkit.UWP
     /// </summary>
     public interface IGeometryBufferModel : IAttachableBufferModel
     {
-        event EventHandler OnVertexBufferUpdated;
-        event EventHandler OnIndexBufferUpdated;
+        event EventHandler VertexBufferUpdated;
+        event EventHandler IndexBufferUpdated;
         /// <summary>
         /// Gets or sets the effects manager.
         /// </summary>
@@ -110,7 +114,7 @@ namespace HelixToolkit.UWP
     /// </summary>
     public interface IBoneSkinMeshBufferModel : IGeometryBufferModel
     {
-        event EventHandler OnBoneIdBufferUpdated;
+        event EventHandler BoneIdBufferUpdated;
         IElementsBufferProxy BoneIdBuffer { get; }
     }
     /// <summary>
@@ -129,5 +133,10 @@ namespace HelixToolkit.UWP
         /// </summary>
         /// <param name="context">The context.</param>
         void UnBindSkinnedVertexBufferToOutput(DeviceContextProxy context);
+        /// <summary>
+        /// Resets the skinned vertex buffer.
+        /// </summary>
+        /// <param name="context">The context.</param>
+        void ResetSkinnedVertexBuffer(DeviceContextProxy context);
     }
 }

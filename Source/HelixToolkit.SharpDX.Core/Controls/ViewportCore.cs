@@ -1,14 +1,17 @@
-﻿using System;
+﻿/*
+The MIT License (MIT)
+Copyright (c) 2018 Helix Toolkit contributors
+*/
+using System;
 using System.Collections.Generic;
 using global::SharpDX;
 
 namespace HelixToolkit.SharpDX.Core.Controls
 {   
-    using UWP;
-    using UWP.Cameras;
-    using UWP.Model.Scene;
-    using UWP.Model.Scene2D;
-    using UWP.Render;
+    using Cameras;
+    using Model.Scene;
+    using Model.Scene2D;
+    using Render;
 
 
     public sealed class ViewportCore : IViewport3DX
@@ -16,7 +19,7 @@ namespace HelixToolkit.SharpDX.Core.Controls
         public event EventHandler OnStartRendering;
         public event EventHandler OnStopRendering;
         public event EventHandler<Exception> OnErrorOccurred;
-        public IRenderHost RenderHost { private set; get; }
+        public IRenderHost RenderHost { get; }
 
         public bool IsShadowMappingEnabled { set; get; }
 
@@ -26,10 +29,10 @@ namespace HelixToolkit.SharpDX.Core.Controls
             get { return effectsManager; }
             set
             {
-                if(effectsManager != value)
+                if (effectsManager != value)
                 {
                     effectsManager = value;
-                    if(RenderHost != null)
+                    if (RenderHost != null)
                     {
                         RenderHost.EffectsManager = value;
                     }
@@ -43,10 +46,10 @@ namespace HelixToolkit.SharpDX.Core.Controls
             get => renderTechnique;
             set
             {
-                if(renderTechnique != value)
+                if (renderTechnique != value)
                 {
                     renderTechnique = value;
-                    if(RenderHost != null)
+                    if (RenderHost != null)
                     {
                         RenderHost.RenderTechnique = value;
                     }
@@ -60,13 +63,13 @@ namespace HelixToolkit.SharpDX.Core.Controls
             set;
         }
 
-        public IEnumerable<SceneNode> Renderables => Items;
+        public IEnumerable<SceneNode> Renderables => Items.ItemsInternal;
 
-        public IEnumerable<SceneNode2D> D2DRenderables => Items2D;
+        public IEnumerable<SceneNode2D> D2DRenderables => Items2D.ItemsInternal;
 
-        public List<SceneNode> Items { get; } = new List<SceneNode>();
+        public GroupNode Items { get; } = new GroupNode();
 
-        public List<SceneNode2D> Items2D { get; } = new List<SceneNode2D>();
+        public SceneNode2D Items2D { get; } = new OverlayNode2D() { EnableBitmapCache = false };
 
         public bool ShowFPS
         {
@@ -108,41 +111,59 @@ namespace HelixToolkit.SharpDX.Core.Controls
 
         public bool RenderD2D
         {
-            set
-            {
-                RenderHost.RenderConfiguration.RenderD2D = value;
-            }
-            get
-            {
-                return RenderHost.RenderConfiguration.RenderD2D;
-            }
+            set => RenderHost.RenderConfiguration.RenderD2D = value;
+            get => RenderHost.RenderConfiguration.RenderD2D;
         }
 
         public Color4 BackgroundColor
         {
-            set
-            {
-                RenderHost.ClearColor = value;
-            }
-            get
-            {
-                return RenderHost.ClearColor;
-            }
+            set => RenderHost.ClearColor = value;
+            get => RenderHost.ClearColor; 
         }
 
         public FXAALevel FXAALevel
         {
-            set
-            {
-                RenderHost.RenderConfiguration.FXAALevel = value;
-            }
-            get
-            {
-                return RenderHost.RenderConfiguration.FXAALevel;
-            }
+            set => RenderHost.RenderConfiguration.FXAALevel = value;
+            get => RenderHost.RenderConfiguration.FXAALevel;
         }
 
-        private SceneNode2D root2D = new OverlayNode2D() { EnableBitmapCache = false };
+        public bool EnableRenderFrustum
+        {
+            set => RenderHost.EnableRenderFrustum = value;
+            get => RenderHost.EnableRenderFrustum;
+        }
+
+        public Rectangle ViewportRectangle { get { return new Rectangle(0, 0, (int)RenderHost.ActualWidth, (int)RenderHost.ActualHeight); } }
+
+        public RenderContext RenderContext { get => RenderHost.RenderContext; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether [enable vertical synchronize].
+        /// </summary>
+        /// <value>
+        ///   <c>true</c> if [enable vertical synchronize]; otherwise, <c>false</c>.
+        /// </value>
+        public bool EnableVSync
+        {
+            set => RenderHost.RenderConfiguration.EnableVSync = value;
+            get => RenderHost.RenderConfiguration.EnableVSync;
+        }
+
+
+        public bool EnableSSAO
+        {
+            set => RenderHost.RenderConfiguration.EnableSSAO = value;
+            get => RenderHost.RenderConfiguration.EnableSSAO;
+        }
+
+        public bool EnableRenderOrder
+        {
+            set => RenderHost.RenderConfiguration.EnableRenderOrder = value;
+            get => RenderHost.RenderConfiguration.EnableRenderOrder;
+        }
+
+        public int Width { private set; get; }
+        public int Height { private set; get; }
 
         public ViewportCore(IntPtr nativeWindowPointer, bool deferred = false)
         {
@@ -167,8 +188,7 @@ namespace HelixToolkit.SharpDX.Core.Controls
             RenderHost.StartRenderLoop += RenderHost_StartRenderLoop;
             RenderHost.StopRenderLoop += RenderHost_StopRenderLoop;
             RenderHost.ExceptionOccurred += (s, e) => { HandleExceptionOccured(e.Exception); };
-            root2D.Items.Add(new FrameStatisticsNode2D());
-            Items2D.Add(root2D);
+            Items2D.ItemsInternal.Add(new FrameStatisticsNode2D());
         }
 
         private void HandleExceptionOccured(Exception exception)
@@ -191,7 +211,7 @@ namespace HelixToolkit.SharpDX.Core.Controls
             RenderHost.UpdateAndRender();
         }
 
-        public void StartD3D(double width, double height)
+        public void StartD3D(int width, int height)
         {
             RenderHost.StartD3D(width, height);
         }
@@ -203,36 +223,24 @@ namespace HelixToolkit.SharpDX.Core.Controls
 
         public void Attach(IRenderHost host)
         {
-            foreach(var model in Items)
-            {
-                model.Attach(host);
-            }
-            foreach(var model in Items2D)
-            {
-                model.Attach(host);
-            }
+            Items.Attach(host);
+            Items2D.Attach(host);
         }
 
         public void Detach()
         {
-            foreach (var model in Items)
-            {
-                model.Detach();
-            }
-            foreach(var model in Items2D)
-            {
-                model.Detach();
-            }
+            Items.Detach();
+            Items2D.Detach();
         }
 
         public void InvalidateRender()
         {
-            RenderHost?.InvalidateRender();
+            RenderHost.InvalidateRender();
         }
 
         public void InvalidateSceneGraph()
         {
-            RenderHost?.InvalidateSceneGraph();
+            RenderHost.InvalidateSceneGraph();
         }
 
         public void Update(TimeSpan timeStamp)
@@ -242,7 +250,9 @@ namespace HelixToolkit.SharpDX.Core.Controls
 
         public void Resize(int width, int height)
         {
-            RenderHost?.Resize(width, height);
+            Width = width;
+            Height = height;
+            RenderHost.Resize(width, height);
         }
     }
 }

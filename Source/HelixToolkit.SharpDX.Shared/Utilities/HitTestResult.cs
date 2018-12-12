@@ -4,10 +4,14 @@ Copyright (c) 2018 Helix Toolkit contributors
 */
 using SharpDX;
 using System;
-#if NETFX_CORE
-namespace HelixToolkit.UWP
-#else
+#if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
+#else
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
+namespace HelixToolkit.UWP
+#endif
 #endif
 {
     /// <summary>
@@ -103,6 +107,7 @@ namespace HelixToolkit.Wpf.SharpDX
     {
         public int TextInfoIndex { set; get; } = 0;
         public TextInfo TextInfo { set; get; } = null;
+        public BillboardType Type { set; get; }
     }
 
     /// <summary>

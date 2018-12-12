@@ -5,10 +5,14 @@ Copyright (c) 2018 Helix Toolkit contributors
 using SharpDX;
 using System.Collections.Generic;
 using System.IO;
-#if NETFX_CORE
-namespace HelixToolkit.UWP
-#else
+#if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
+#else
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
+namespace HelixToolkit.UWP
+#endif
 #endif
 {
     using Render;
@@ -68,7 +72,7 @@ namespace HelixToolkit.Wpf.SharpDX
     [Flags]
     public enum BillboardType
     {
-        SingleText = 1, MultipleText = 2, SingleImage = 4
+        SingleText = 1, MultipleText = 2, Image = 4
     }
     /// <summary>
     /// 

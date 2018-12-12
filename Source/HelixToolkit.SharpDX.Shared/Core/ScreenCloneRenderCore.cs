@@ -25,7 +25,7 @@ namespace HelixToolkit.Wpf.SharpDX.Core
     using System.Collections.Generic;
     using System.Linq;
     using System.Diagnostics;
-
+    using Components;
 
     /// <summary>
     /// 
@@ -69,7 +69,7 @@ namespace HelixToolkit.Wpf.SharpDX.Core
     /// the clone window must reside in those monitors which is rendered by external graphics card, or error will be occurred.
     /// Ref: https://support.microsoft.com/en-us/help/3019314/error-generated-when-desktop-duplication-api-capable-application-is-ru
     /// </summary>
-    public class ScreenCloneRenderCore : RenderCoreBase<ScreenDuplicationModelStruct>, IScreenClone
+    public class ScreenCloneRenderCore : RenderCore, IScreenClone
     {
         private int output = 0;
         /// <summary>
@@ -155,20 +155,18 @@ namespace HelixToolkit.Wpf.SharpDX.Core
         private bool clearTarget = true;
         private bool invalidRender = true;
         private PointerInfo pointer = new PointerInfo();
+        private readonly ConstantBufferComponent modelCB;
+        private ScreenDuplicationModelStruct modelStruct;
 
-        private DX11RenderHostConfiguration config = new DX11RenderHostConfiguration() { ClearEachFrame = false, RenderD2D = false, RenderLights = false, UpdatePerFrameData = false };
+        private readonly DX11RenderHostConfiguration config = new DX11RenderHostConfiguration() { ClearEachFrame = false, RenderD2D = false, RenderLights = false, UpdatePerFrameData = false };
         /// <summary>
         /// Initializes a new instance of the <see cref="ScreenCloneRenderCore"/> class.
         /// </summary>
-        public ScreenCloneRenderCore() : base(RenderType.Opaque) { }
-        /// <summary>
-        /// Gets the model constant buffer description.
-        /// </summary>
-        /// <returns></returns>
-        protected override ConstantBufferDescription GetModelConstantBufferDescription()
-        {
-            return new ConstantBufferDescription(DefaultBufferNames.ScreenDuplicationCB, ScreenDuplicationModelStruct.SizeInBytes);
+        public ScreenCloneRenderCore() : base(RenderType.Opaque)
+        { 
+            modelCB = AddComponent(new ConstantBufferComponent(new ConstantBufferDescription(DefaultBufferNames.ScreenDuplicationCB, ScreenDuplicationModelStruct.SizeInBytes)));
         }
+
         /// <summary>
         /// Called when [attach].
         /// </summary>
@@ -176,19 +174,12 @@ namespace HelixToolkit.Wpf.SharpDX.Core
         /// <returns></returns>
         protected override bool OnAttach(IRenderTechnique technique)
         {
-            if (base.OnAttach(technique))
-            {
-                DefaultShaderPass = technique.EffectsManager[DefaultRenderTechniqueNames.ScreenDuplication][DefaultPassNames.Default];
-                CursorShaderPass = technique.EffectsManager[DefaultRenderTechniqueNames.ScreenDuplication][DefaultPassNames.ScreenQuad];
-                textureBindSlot = DefaultShaderPass.PixelShader.ShaderResourceViewMapping.TryGetBindSlot(DefaultBufferNames.DiffuseMapTB);
-                samplerBindSlot = DefaultShaderPass.PixelShader.SamplerMapping.TryGetBindSlot(DefaultSamplerStateNames.DiffuseMapSampler);
-                textureSampler = Collect(technique.EffectsManager.StateManager.Register(DefaultSamplers.ScreenDupSampler));
-                return Initialize(technique.EffectsManager);
-            }
-            else
-            {
-                return false;
-            }
+            DefaultShaderPass = technique.EffectsManager[DefaultRenderTechniqueNames.ScreenDuplication][DefaultPassNames.Default];
+            CursorShaderPass = technique.EffectsManager[DefaultRenderTechniqueNames.ScreenDuplication][DefaultPassNames.ScreenQuad];
+            textureBindSlot = DefaultShaderPass.PixelShader.ShaderResourceViewMapping.TryGetBindSlot(DefaultBufferNames.DiffuseMapTB);
+            samplerBindSlot = DefaultShaderPass.PixelShader.SamplerMapping.TryGetBindSlot(DefaultSamplerStateNames.SurfaceSampler);
+            textureSampler = Collect(technique.EffectsManager.StateManager.Register(DefaultSamplers.ScreenDupSampler));
+            return Initialize(technique.EffectsManager);
         }
 
         private bool Initialize(IEffectsManager manager)
@@ -208,22 +199,17 @@ namespace HelixToolkit.Wpf.SharpDX.Core
         /// </summary>
         /// <param name="context">The context.</param>
         /// <param name="deviceContext">The device context.</param>
-        protected override void OnRender(RenderContext context, DeviceContextProxy deviceContext)
+        public override void Render(RenderContext context, DeviceContextProxy deviceContext)
         {
             bool succ = duplicationResource.Initialize();
             if (!succ)
             {
-                InvalidateRenderer();
+                RaiseInvalidateRender();
                 return;
             }
             context.RenderHost.RenderConfiguration = config;
-            FrameData data;
-            
-            bool isTimeOut;
-            bool accessLost;
 
-
-            if (duplicationResource.GetFrame(Output, out data, ref pointer, out isTimeOut, out accessLost))
+            if (duplicationResource.GetFrame(Output, out FrameData data, ref pointer, out bool isTimeOut, out bool accessLost))
             {              
                 if (data.FrameInfo.TotalMetadataBufferSize > 0)
                 {
@@ -242,8 +228,7 @@ namespace HelixToolkit.Wpf.SharpDX.Core
                 bool cursorValid = false;
                 if (pointer.Visible)
                 {
-                    Vector4 rect;
-                    if(frameProcessor.ProcessCursor(ref pointer, deviceContext, out rect))
+                    if(frameProcessor.ProcessCursor(ref pointer, deviceContext, out Vector4 rect))
                     {
                         GetCursorVertexBound((int)context.ActualWidth, (int)context.ActualHeight, frameProcessor.TextureWidth, frameProcessor.TextureHeight, ref rect);
                         invalidRender = true;
@@ -252,7 +237,8 @@ namespace HelixToolkit.Wpf.SharpDX.Core
                 }
                 if (invalidRender)
                 {
-                    ModelConstBuffer.UploadDataToBuffer(deviceContext, ref modelStruct);
+                    OnUpdatePerModelStruct(context);
+                    modelCB.Upload(deviceContext, ref modelStruct);
                     DefaultShaderPass.BindShader(deviceContext);
                     DefaultShaderPass.BindStates(deviceContext,StateType.BlendState | StateType.DepthStencilState | StateType.RasterState);
                     DefaultShaderPass.PixelShader.BindSampler(deviceContext, samplerBindSlot, textureSampler);
@@ -283,10 +269,10 @@ namespace HelixToolkit.Wpf.SharpDX.Core
             {
                 duplicationResource.ReleaseFrame();
             }
-            InvalidateRenderer();
+            RaiseInvalidateRender();
         }
 
-        #region Draw Cursor
+#region Draw Cursor
 
 
 
@@ -303,16 +289,11 @@ namespace HelixToolkit.Wpf.SharpDX.Core
             deviceContext.Draw(4, 0);
         }
 
-        #endregion
-        /// <summary>
-        /// Called when [update per model structure].
-        /// </summary>
-        /// <param name="model">The model.</param>
-        /// <param name="context">The context.</param>
-        protected override void OnUpdatePerModelStruct(ref ScreenDuplicationModelStruct model, RenderContext context)
+#endregion
+
+        private void OnUpdatePerModelStruct(RenderContext context)
         {
-            DuplicationInfo info;
-            if (!duplicationResource.TryGetInfo(Output, out info))
+            if (!duplicationResource.TryGetInfo(Output, out DuplicationInfo info))
             {
                 return;
             }
@@ -320,19 +301,16 @@ namespace HelixToolkit.Wpf.SharpDX.Core
             int height = Math.Abs(info.OutputDesc.DesktopBounds.Bottom - info.OutputDesc.DesktopBounds.Top);
             var texBound = GetTextureBound(width, height);
             var verBound = GetVertexBound((int)context.ActualWidth, (int)context.ActualHeight, width, height);
-            model.TopLeft = new Vector4(verBound.X, verBound.Z, 0, 1);
-            model.TopRight = new Vector4(verBound.Y, verBound.Z, 0, 1);
-            model.BottomLeft = new Vector4(verBound.X, verBound.W, 0, 1);
-            model.BottomRight = new Vector4(verBound.Y, verBound.W, 0, 1);
-            model.TexTopLeft = new Vector2(texBound.X, texBound.Z);
-            model.TexTopRight = new Vector2(texBound.Y, texBound.Z);
-            model.TexBottomLeft = new Vector2(texBound.X, texBound.W);
-            model.TexBottomRight = new Vector2(texBound.Y, texBound.W);           
+            modelStruct.TopLeft = new Vector4(verBound.X, verBound.Z, 0, 1);
+            modelStruct.TopRight = new Vector4(verBound.Y, verBound.Z, 0, 1);
+            modelStruct.BottomLeft = new Vector4(verBound.X, verBound.W, 0, 1);
+            modelStruct.BottomRight = new Vector4(verBound.Y, verBound.W, 0, 1);
+            modelStruct.TexTopLeft = new Vector2(texBound.X, texBound.Z);
+            modelStruct.TexTopRight = new Vector2(texBound.Y, texBound.Z);
+            modelStruct.TexBottomLeft = new Vector2(texBound.X, texBound.W);
+            modelStruct.TexBottomRight = new Vector2(texBound.Y, texBound.W);           
         }
 
-        protected override void OnUploadPerModelConstantBuffers(DeviceContextProxy context)
-        {
-        }
         /// <summary>
         /// Gets the texture bound. Ouput: x(left), y(right), z(top), w(bottom)
         /// </summary>
@@ -345,11 +323,13 @@ namespace HelixToolkit.Wpf.SharpDX.Core
             {
                 return new Vector4(0, 1, 0, 1);
             }
-            var bound = new Vector4();
-            bound.X = (float)cloneRectangle.Left / screenWidth;
-            bound.Y = (float)cloneRectangle.Right / screenWidth;
-            bound.Z = (float)cloneRectangle.Top / screenHeight;
-            bound.W = (float)cloneRectangle.Bottom / screenHeight;
+            var bound = new Vector4()
+            {
+                X = (float)cloneRectangle.Left / screenWidth,
+                Y = (float)cloneRectangle.Right / screenWidth,
+                Z = (float)cloneRectangle.Top / screenHeight,
+                W = (float)cloneRectangle.Bottom / screenHeight,
+            };
             return bound;
         }
         /// <summary>
@@ -784,7 +764,7 @@ namespace HelixToolkit.Wpf.SharpDX.Core
             private readonly Stack<OutputDuplication> currentDuplicationStack = new Stack<OutputDuplication>();
             private readonly Stack<Texture2D> currentDuplicationTexture = new Stack<Texture2D>();
 
-            private int getFrameTimeOut = 5;
+            private readonly int getFrameTimeOut = 5;
 
             public DuplicationResource(global::SharpDX.Direct3D11.Device device)
             {
@@ -847,14 +827,12 @@ namespace HelixToolkit.Wpf.SharpDX.Core
                 {
                     return false;
                 }
-                DuplicationInfo info;
-                if(!duplicationDict.TryGetValue(outputIndex, out info))
+                if(!duplicationDict.TryGetValue(outputIndex, out DuplicationInfo info))
                 {
                     return false;
                 }
-                OutputDuplicateFrameInformation frameInfo;
-                Resource desktopResource;
-                var code = info.Duplication.TryAcquireNextFrame(getFrameTimeOut, out frameInfo, out desktopResource);
+
+                var code = info.Duplication.TryAcquireNextFrame(getFrameTimeOut, out OutputDuplicateFrameInformation frameInfo, out Resource desktopResource);
                 if (!code.Success)
                 {
                     if (code.Code == ResultCode.WaitTimeout.Result.Code)
@@ -889,12 +867,11 @@ namespace HelixToolkit.Wpf.SharpDX.Core
                     {
                         metaDataSize = frameInfo.TotalMetadataBufferSize;
                     }
-                    int moveRectSize;
                     if (moveBuffer == null || moveBuffer.Length < metaDataSize)
                     {
                         moveBuffer = new OutputDuplicateMoveRectangle[metaDataSize];
                     }
-                    info.Duplication.GetFrameMoveRects(metaDataSize, moveBuffer, out moveRectSize);
+                    info.Duplication.GetFrameMoveRects(metaDataSize, moveBuffer, out int moveRectSize);
                     data.MoveRectangles = moveBuffer;
                     data.MoveCount = moveRectSize / Marshal.SizeOf(typeof(OutputDuplicateMoveRectangle));
 
@@ -902,8 +879,7 @@ namespace HelixToolkit.Wpf.SharpDX.Core
                     {
                         dirtyBuffer = new RawRectangle[metaDataSize];
                     }
-                    int dirtyRectSize;
-                    info.Duplication.GetFrameDirtyRects(metaDataSize, dirtyBuffer, out dirtyRectSize);
+                    info.Duplication.GetFrameDirtyRects(metaDataSize, dirtyBuffer, out int dirtyRectSize);
                     data.DirtyRectangles = dirtyBuffer;
                     data.DirtyCount = dirtyRectSize / Marshal.SizeOf(typeof(RawRectangle));
                     data.FrameInfo = frameInfo;
@@ -961,9 +937,8 @@ namespace HelixToolkit.Wpf.SharpDX.Core
                     unsafe
                     {
                         fixed (byte* ptrShapeBufferPtr = pointerInfo.PtrShapeBuffer)
-                        {
-                            OutputDuplicatePointerShapeInformation info;                           
-                            duplication.GetFramePointerShape(frameInfo.PointerShapeBufferSize, (IntPtr)ptrShapeBufferPtr, out pointerInfo.BufferSize, out info);
+                        {                   
+                            duplication.GetFramePointerShape(frameInfo.PointerShapeBufferSize, (IntPtr)ptrShapeBufferPtr, out pointerInfo.BufferSize, out OutputDuplicatePointerShapeInformation info);
                             if(info.Type != 0)
                             {
                                 pointerInfo.ShapeInfo = info;

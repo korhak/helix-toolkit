@@ -209,9 +209,11 @@ namespace HelixToolkit.Wpf.SharpDX
             }
         }
 
-        public CameraCore CameraCore { get { return this.Camera; } }
+        public CameraCore CameraCore { get { return CameraController.ActualCamera; } }
 
         public IRenderHost RenderHost { get { return this.renderHostInternal; } }
+
+        public global::SharpDX.Rectangle ViewportRectangle { get { return new global::SharpDX.Rectangle(0, 0, (int)ActualWidth, (int)ActualHeight); } }
 
         private Window parentWindow;
 
@@ -275,8 +277,7 @@ namespace HelixToolkit.Wpf.SharpDX
                 {
                     renderHostInternal.IsRendering = (bool)e.NewValue;
                 }
-            };
-            AddHandler(ViewBoxModel3D.ViewBoxClickedEvent, new EventHandler<ViewBoxModel3D.ViewBoxClickedEventArgs>(ViewCubeClicked));
+            };            
         }
 
         private void InitCameraController()
@@ -489,6 +490,7 @@ namespace HelixToolkit.Wpf.SharpDX
             }
 
             var myAdornerLayer = AdornerLayer.GetAdornerLayer(visual);
+            if (myAdornerLayer == null) { return; }
             if (this.targetAdorner != null)
             {
                 myAdornerLayer.Remove(this.targetAdorner);
@@ -510,6 +512,7 @@ namespace HelixToolkit.Wpf.SharpDX
             }
 
             var myAdornerLayer = AdornerLayer.GetAdornerLayer(visual);
+            if (myAdornerLayer == null) { return; }
             if (this.rectangleAdorner != null)
             {
                 myAdornerLayer.Remove(this.rectangleAdorner);
@@ -625,12 +628,17 @@ namespace HelixToolkit.Wpf.SharpDX
             {
                 hostPresenter.Content = new DPFCanvas(EnableDeferredRendering);
             }
+
+            if (this.renderHostInternal != null)
+            {
+                this.renderHostInternal.Rendered -= this.RaiseRenderHostRendered;
+                this.renderHostInternal.ExceptionOccurred -= this.HandleRenderException;
+            }
+
             renderHostInternal = (hostPresenter.Content as IRenderCanvas).RenderHost;
             if (this.renderHostInternal != null)
             {
-                this.renderHostInternal.OnRendered -= this.OnRendered;
-                this.renderHostInternal.OnRendered += this.OnRendered;
-                this.renderHostInternal.ExceptionOccurred -= this.HandleRenderException;
+                this.renderHostInternal.Rendered += this.RaiseRenderHostRendered;
                 this.renderHostInternal.ExceptionOccurred += this.HandleRenderException;
                 this.renderHostInternal.ClearColor = BackgroundColor.ToColor4();
                 this.renderHostInternal.IsShadowMapEnabled = IsShadowMappingEnabled;
@@ -649,6 +657,10 @@ namespace HelixToolkit.Wpf.SharpDX
                 this.renderHostInternal.RenderConfiguration.OITWeightMode = OITWeightMode;
                 this.renderHostInternal.RenderConfiguration.FXAALevel = FXAALevel;
                 this.renderHostInternal.RenderConfiguration.EnableRenderOrder = EnableRenderOrder;
+                this.renderHostInternal.RenderConfiguration.EnableSSAO = EnableSSAO;
+                this.renderHostInternal.RenderConfiguration.SSAORadius = (float)SSAOSamplingRadius;
+                this.renderHostInternal.RenderConfiguration.SSAOIntensity = (float)SSAOIntensity;
+                this.renderHostInternal.RenderConfiguration.SSAOQuality = SSAOQuality;
                 if (ShowFrameRate)
                 {
                     this.renderHostInternal.ShowRenderDetail |= RenderDetail.FPS;
@@ -811,6 +823,7 @@ namespace HelixToolkit.Wpf.SharpDX
             }
 
             var myAdornerLayer = AdornerLayer.GetAdornerLayer(visual);
+            if (myAdornerLayer == null) { return; }
             this.targetAdorner = new TargetSymbolAdorner(visual, position);
             myAdornerLayer.Add(this.targetAdorner);
         }
@@ -833,6 +846,7 @@ namespace HelixToolkit.Wpf.SharpDX
             }
 
             var myAdornerLayer = AdornerLayer.GetAdornerLayer(visual);
+            if (myAdornerLayer == null) { return; }
             this.rectangleAdorner = new RectangleAdorner(
                 visual, rect, Colors.LightGray, Colors.Black, 3, 1, 10, DashStyles.Solid);
             myAdornerLayer.Add(this.rectangleAdorner);
@@ -1065,6 +1079,11 @@ namespace HelixToolkit.Wpf.SharpDX
             base.OnMouseWheel(e);
         }
 
+        private void Viewport3DX_FormMouseWheel(object sender, WinformHostExtend.FormMouseWheelEventArgs e)
+        {
+            cameraController.OnMouseWheel(this, e);
+            base.OnMouseWheel(e);
+        }
         /// <inheritdoc/>
         protected override void OnTouchUp(TouchEventArgs e)
         {
@@ -1312,7 +1331,11 @@ namespace HelixToolkit.Wpf.SharpDX
                     this.ZoomExtents();
                 }));              
             }
-            FormMouseMove += Viewport3DX_FormMouseMove;
+            if (EnableSwapChainRendering)
+            {
+                FormMouseMove += Viewport3DX_FormMouseMove;
+                FormMouseWheel += Viewport3DX_FormMouseWheel;
+            }
         }
 
         private void ParentWindow_Closed(object sender, EventArgs e)
@@ -1337,6 +1360,7 @@ namespace HelixToolkit.Wpf.SharpDX
         private void ControlUnloaded(object sender, RoutedEventArgs e)
         {
             FormMouseMove -= Viewport3DX_FormMouseMove;
+            FormMouseWheel -= Viewport3DX_FormMouseWheel;
             if (parentWindow != null)
             {
                 parentWindow.Closed -= ParentWindow_Closed;
@@ -1559,13 +1583,13 @@ namespace HelixToolkit.Wpf.SharpDX
             }
         }
 
-        private void ViewCubeClicked(object sender, ViewBoxModel3D.ViewBoxClickedEventArgs e)
+        private void ViewCubeClicked(Vector3D lookDirection, Vector3D upDirection)
         {
             var target = cameraController.ActualCamera.Position + cameraController.ActualCamera.LookDirection;
             double distance = cameraController.ActualCamera.LookDirection.Length;
-            e.LookDirection *= distance;
-            var newPosition = target - e.LookDirection;
-            cameraController.ActualCamera.AnimateTo(newPosition, e.LookDirection, e.UpDirection, 500);
+            lookDirection *= distance;
+            var newPosition = target - lookDirection;
+            cameraController.ActualCamera.AnimateTo(newPosition, lookDirection, upDirection, 500);
         }
 
         /// <summary>
@@ -1628,8 +1652,14 @@ namespace HelixToolkit.Wpf.SharpDX
                 this.currentHit = hits.FirstOrDefault(x => x.IsValid);
                 if (this.currentHit != null)
                 {
-                    (this.currentHit.ModelHit as Element3D)?.RaiseEvent(
-                        new MouseDown3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    if(currentHit.ModelHit is Element3D ele)
+                    {
+                        ele.RaiseEvent(new MouseDown3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    }
+                    else
+                    {
+                        RaiseEvent(new MouseDown3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    }
                 }
             }
             else
@@ -1647,6 +1677,16 @@ namespace HelixToolkit.Wpf.SharpDX
             if(viewCube.HitTest(RenderContext, ray, ref hits))
             {
                 viewCube.RaiseEvent(new MouseDown3DEventArgs(viewCube, this.currentHit, p, this));
+                var normal = hits[0].NormalAtHit;              
+                if (Vector3.Cross(normal, ModelUpDirection.ToVector3()).LengthSquared() < 1e-5)
+                {
+                    var vecLeft = new Vector3(-normal.Y, -normal.Z, -normal.X);
+                    ViewCubeClicked(hits[0].NormalAtHit.ToVector3D(), vecLeft.ToVector3D());
+                }
+                else
+                {
+                    ViewCubeClicked(hits[0].NormalAtHit.ToVector3D(), ModelUpDirection);
+                }
                 return true;
             }
             else
@@ -1682,8 +1722,14 @@ namespace HelixToolkit.Wpf.SharpDX
             {
                 if (this.currentHit != null)
                 {
-                    (this.currentHit.ModelHit as Element3D)?.RaiseEvent(
-                        new MouseMove3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    if (currentHit.ModelHit is Element3D ele)
+                    {
+                        ele.RaiseEvent(new MouseMove3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    }
+                    else
+                    {
+                        RaiseEvent(new MouseMove3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    }
                 }
                 else
                 {
@@ -1714,8 +1760,15 @@ namespace HelixToolkit.Wpf.SharpDX
             {
                 if (this.currentHit != null)
                 {               
-                    (this.currentHit.ModelHit as Element3D)?.RaiseEvent(
-                        new MouseUp3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    if(currentHit.ModelHit is Element3D ele)
+                    {
+                        ele.RaiseEvent(new MouseUp3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    }
+                    else
+                    {
+                        RaiseEvent(new MouseUp3DEventArgs(this.currentHit.ModelHit, this.currentHit, pt, this));
+                    }
+
                     this.currentHit = null;
                     Mouse.Capture(this, CaptureMode.None);
                 }
@@ -1725,6 +1778,12 @@ namespace HelixToolkit.Wpf.SharpDX
                     this.RaiseEvent(new MouseUp3DEventArgs(this, null, pt, this));
                 }
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void RaiseRenderHostRendered(object sender, EventArgs e)
+        {
+            this.OnRendered?.Invoke(sender, e);
         }
 
         public static T FindVisualAncestor<T>(DependencyObject obj) where T : DependencyObject

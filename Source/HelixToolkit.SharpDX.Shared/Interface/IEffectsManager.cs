@@ -9,10 +9,14 @@ using System.Collections.Generic;
 using Device = SharpDX.Direct3D11.Device1;
 using DeviceContext = SharpDX.Direct3D11.DeviceContext1;
 #endif
-#if NETFX_CORE
-namespace HelixToolkit.UWP
-#else
+#if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
+#else
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
+namespace HelixToolkit.UWP
+#endif
 #endif
 {
     using HelixToolkit.Logger;
@@ -122,13 +126,13 @@ namespace HelixToolkit.Wpf.SharpDX
     public interface IDeviceResources : IDevice3DResources, IDevice2DResources, IDisposable
     {
         /// <summary>
-        /// Called when [device error].
-        /// </summary>
-        void OnDeviceError();
-        /// <summary>
         /// Occurs when [on dispose resources].
         /// </summary>
-        event EventHandler<EventArgs> OnDisposeResources;
+        event EventHandler<EventArgs> DisposingResources;
+        /// <summary>
+        /// Occurs when [device created].
+        /// </summary>
+        event EventHandler<EventArgs> Reinitialized;
     }
     /// <summary>
     /// 
@@ -161,7 +165,14 @@ namespace HelixToolkit.Wpf.SharpDX
         /// <param name="name"></param>
         /// <returns></returns>
         IRenderTechnique this[string name] { get; }
-
+        /// <summary>
+        /// Reinitializes all resources after calling <see cref="DisposeAllResources"/>.
+        /// </summary>
+        void Reinitialize();
+        /// <summary>
+        /// Disposes all resources. This is used to handle such as DeviceLost or DeviceRemoved Error
+        /// </summary>
+        void DisposeAllResources();
         /// <summary>
         /// Add a technique by description
         /// </summary>
@@ -188,11 +199,11 @@ namespace HelixToolkit.Wpf.SharpDX
         /// <summary>
         /// Occurs when [on invalidate renderer].
         /// </summary>
-        event EventHandler<EventArgs> OnInvalidateRenderer;
+        event EventHandler<EventArgs> InvalidateRender;
         /// <summary>
         /// Invalidates the renderer.
         /// </summary>
-        void InvalidateRenderer();
+        void RaiseInvalidateRender();
         /// <summary>
         /// Outputs the resource count summary.
         /// </summary>

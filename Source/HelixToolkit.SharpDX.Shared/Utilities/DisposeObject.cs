@@ -13,7 +13,11 @@ using System.Linq;
 #if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
 #else
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
 namespace HelixToolkit.UWP
+#endif
 #endif
 {
     /// <summary>
@@ -122,16 +126,16 @@ namespace HelixToolkit.UWP
 
         #region IDisposible
 
-        /// <summary>
-        /// Releases unmanaged resources and performs other cleanup operations before the
-        /// <see cref="DisposeObject"/> is reclaimed by garbage collection.
-        /// </summary>
-        [SuppressMessage("Microsoft.Design", "CA1063:ImplementIDisposableCorrectly", Justification = "False positive.")]
-        ~DisposeObject()
-        {
-            // Finalizer calls Dispose(false)
-            Dispose(false);
-        }
+        ///// <summary>
+        ///// Releases unmanaged resources and performs other cleanup operations before the
+        ///// <see cref="DisposeObject"/> is reclaimed by garbage collection.
+        ///// </summary>
+        //[SuppressMessage("Microsoft.Design", "CA1063:ImplementIDisposableCorrectly", Justification = "False positive.")]
+        //~DisposeObject()
+        //{
+        //    // Finalizer calls Dispose(false)
+        //    Dispose(false);
+        //}
 
         /// <summary>
         /// Gets a value indicating whether this instance is disposed.
@@ -161,7 +165,7 @@ namespace HelixToolkit.UWP
                 Disposing?.Invoke(this, disposing ? BoolArgs.TrueArgs : BoolArgs.FalseArgs);
 
                 OnDispose(disposing);
-                GC.SuppressFinalize(this);
+                //GC.SuppressFinalize(this);
 
                 IsDisposed = true;
 
@@ -353,16 +357,16 @@ namespace HelixToolkit.UWP
 
         #region IDisposible
 
-        /// <summary>
-        /// Releases unmanaged resources and performs other cleanup operations before the
-        /// <see cref="ReferenceCountDisposeObject"/> is reclaimed by garbage collection.
-        /// </summary>
-        [SuppressMessage("Microsoft.Design", "CA1063:ImplementIDisposableCorrectly", Justification = "False positive.")]
-        ~ReferenceCountDisposeObject()
-        {
-            // Finalizer calls Dispose(false)
-            Dispose(false);
-        }
+        ///// <summary>
+        ///// Releases unmanaged resources and performs other cleanup operations before the
+        ///// <see cref="ReferenceCountDisposeObject"/> is reclaimed by garbage collection.
+        ///// </summary>
+        //[SuppressMessage("Microsoft.Design", "CA1063:ImplementIDisposableCorrectly", Justification = "False positive.")]
+        //~ReferenceCountDisposeObject()
+        //{
+        //    // Finalizer calls Dispose(false)
+        //    Dispose(false);
+        //}
 
         /// <summary>
         /// Gets a value indicating whether this instance is disposed.
@@ -371,7 +375,10 @@ namespace HelixToolkit.UWP
         /// 	<c>true</c> if this instance is disposed; otherwise, <c>false</c>.
         /// </value>
         public bool IsDisposed { get; private set; }
-
+        /// <summary>
+        /// Flag if this object is in object pool. Set to true to avoid disposing and return it to the pool
+        /// </summary>
+        internal bool IsPooled = false;
         /// <summary>
         /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
         /// </summary>
@@ -392,6 +399,7 @@ namespace HelixToolkit.UWP
         /// </summary>
         internal void ForceDispose()
         {
+            IsPooled = false;
             Interlocked.Exchange(ref refCounter, 1);
             Dispose();
         }
@@ -400,13 +408,16 @@ namespace HelixToolkit.UWP
         /// </summary>
         private void Dispose(bool disposing)
         {
-            // TODO Should we throw an exception if this method is called more than once?
-            if (Interlocked.Decrement(ref refCounter) == 0 && !IsDisposed)
+            if (IsPooled)
+            {
+                OnPutBackToPool();
+            }
+            else if (Interlocked.Decrement(ref refCounter) == 0 && !IsDisposed)
             {
                 Disposing?.Invoke(this, disposing ? BoolArgs.TrueArgs : BoolArgs.FalseArgs);
 
                 OnDispose(disposing);
-                GC.SuppressFinalize(this);
+                //GC.SuppressFinalize(this);
 
                 IsDisposed = true;
 
@@ -416,6 +427,7 @@ namespace HelixToolkit.UWP
             }
         }
 
+        protected virtual void OnPutBackToPool() {}
         #endregion
 
         #region INotifyPropertyChanged

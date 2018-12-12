@@ -4,331 +4,311 @@ Copyright (c) 2018 Helix Toolkit contributors
 */
 using System;
 using SharpDX.Direct3D11;
+using System.Runtime.CompilerServices;
 #if !NETFX_CORE
-namespace HelixToolkit.Wpf.SharpDX.Core
+namespace HelixToolkit.Wpf.SharpDX
 #else
-namespace HelixToolkit.UWP.Core
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
+namespace HelixToolkit.UWP
+#endif
 #endif
 {
-    using Utilities;
-    using Render;
-    using Shaders;
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <typeparam name="MODELSTRUCT"></typeparam>
-    public abstract class GeometryRenderCore<MODELSTRUCT> : RenderCoreBase<MODELSTRUCT>, IGeometryRenderCore where MODELSTRUCT : struct
+    namespace Core
     {
-        private RasterizerStateProxy rasterState = null;
+        using Utilities;
+        using Render;
+        using Shaders;
+    
+
         /// <summary>
         /// 
         /// </summary>
-        public RasterizerStateProxy RasterState { get { return rasterState; } }
-
-        private RasterizerStateProxy invertCullModeState = null;
-        public RasterizerStateProxy InvertCullModeState { get { return invertCullModeState; } }
-
-        private IElementsBufferModel instanceBuffer;
-        /// <summary>
-        /// 
-        /// </summary>
-        public IElementsBufferModel InstanceBuffer
+        public abstract class GeometryRenderCore : RenderCore, IGeometryRenderCore
         {
-            set
+            private RasterizerStateProxy rasterState = null;
+            /// <summary>
+            /// 
+            /// </summary>
+            public RasterizerStateProxy RasterState { get { return rasterState; } }
+
+            private RasterizerStateProxy invertCullModeState = null;
+            public RasterizerStateProxy InvertCullModeState { get { return invertCullModeState; } }
+
+            private IElementsBufferModel instanceBuffer = MatrixInstanceBufferModel.Empty;
+            /// <summary>
+            /// 
+            /// </summary>
+            public IElementsBufferModel InstanceBuffer
             {
-                var old = instanceBuffer;
-                if(SetAffectsCanRenderFlag(ref instanceBuffer, value))
+                set
                 {
-                    if (old != null)
+                    var old = instanceBuffer;
+                    if(SetAffectsCanRenderFlag(ref instanceBuffer, value))
                     {
-                        old.OnElementChanged -= OnElementChanged;
+                        if (old != null)
+                        {
+                            old.ElementChanged -= OnElementChanged;
+                        }
+                        if (instanceBuffer != null)
+                        {
+                            instanceBuffer.ElementChanged += OnElementChanged;
+                        }
+                        else
+                        {
+                            instanceBuffer = MatrixInstanceBufferModel.Empty;
+                        }
                     }
-                    if (instanceBuffer != null)
+                }
+                get
+                {
+                    return instanceBuffer;   
+                }
+            }
+
+            private IAttachableBufferModel geometryBuffer;
+            /// <summary>
+            /// 
+            /// </summary>
+            public IAttachableBufferModel GeometryBuffer
+            {
+                set
+                {
+                    if(SetAffectsCanRenderFlag(ref geometryBuffer, value))
                     {
-                        instanceBuffer.OnElementChanged += OnElementChanged;
+                        OnGeometryBufferChanged(value);
                     }
                 }
+                get { return geometryBuffer; }
             }
-            get
-            {
-                return instanceBuffer;   
-            }
-        }
 
-        private IAttachableBufferModel geometryBuffer;
-        /// <summary>
-        /// 
-        /// </summary>
-        public IAttachableBufferModel GeometryBuffer
-        {
-            set
+            private RasterizerStateDescription rasterDescription = new RasterizerStateDescription()
             {
-                if(SetAffectsCanRenderFlag(ref geometryBuffer, value))
+                FillMode = FillMode.Solid,
+                CullMode = CullMode.None,
+            };
+            /// <summary>
+            /// 
+            /// </summary>
+            public RasterizerStateDescription RasterDescription
+            {
+                set
                 {
-                    OnGeometryBufferChanged(value);
+                    if(SetAffectsRender(ref rasterDescription, value) && IsAttached)
+                    {
+                        CreateRasterState(value, false);
+                    }
+                }
+                get
+                {
+                    return rasterDescription;
                 }
             }
-            get { return geometryBuffer; }
-        }
 
-        private RasterizerStateDescription rasterDescription = new RasterizerStateDescription()
-        {
-            FillMode = FillMode.Solid,
-            CullMode = CullMode.None,
-        };
-        /// <summary>
-        /// 
-        /// </summary>
-        public RasterizerStateDescription RasterDescription
-        {
-            set
+            /// <summary>
+            /// Initializes a new instance of the <see cref="GeometryRenderCore"/> class.
+            /// </summary>
+            public GeometryRenderCore() : base(RenderType.Opaque) { }
+            /// <summary>
+            /// Initializes a new instance of the <see cref="GeometryRenderCore"/> class.
+            /// </summary>
+            /// <param name="renderType">Type of the render.</param>
+            public GeometryRenderCore(RenderType renderType) : base(renderType) { }
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="description"></param>
+            /// <param name="force"></param>
+            /// <returns></returns>
+            protected virtual bool CreateRasterState(RasterizerStateDescription description, bool force)
             {
-                if(SetAffectsRender(ref rasterDescription, value) && IsAttached)
+                RemoveAndDispose(ref rasterState);
+                RemoveAndDispose(ref invertCullModeState);
+                rasterState = Collect(EffectTechnique.EffectsManager.StateManager.Register(description));
+                var invCull = description;
+                if(description.CullMode != CullMode.None)
                 {
-                    CreateRasterState(value, false);
+                    invCull.CullMode = description.CullMode == CullMode.Back ? CullMode.Front : CullMode.Back;
                 }
+                invertCullModeState = Collect(EffectTechnique.EffectsManager.StateManager.Register(invCull));
+                return true;
             }
-            get
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="technique"></param>
+            /// <returns></returns>
+            protected override bool OnAttach(IRenderTechnique technique)
             {
-                return rasterDescription;
-            }
-        }
-
-        private string defaultPassName = DefaultPassNames.Default;
-        /// <summary>
-        /// Name of the default pass inside a technique.
-        /// <para>Default: <see cref="DefaultPassNames.Default"/></para>
-        /// </summary>
-        public string DefaultShaderPassName
-        {
-            set
-            {
-                if(Set(ref defaultPassName, value) && IsAttached)
-                {
-                    DefaultShaderPass = EffectTechnique[value];
-                }
-            }
-            get
-            {
-                return defaultPassName;
-            }
-        }
-
-        private string defaultShadowPassName = DefaultPassNames.ShadowPass;
-        /// <summary>
-        /// 
-        /// </summary>
-        public string DefaultShadowPassName
-        {
-            set
-            {
-                if (Set(ref defaultShadowPassName, value) && IsAttached)
-                {
-                    ShadowPass = EffectTechnique[value];
-                }
-            }
-            get
-            {
-                return defaultShadowPassName;
-            }
-        }
-        private ShaderPass defaultShaderPass = ShaderPass.NullPass;
-        /// <summary>
-        /// 
-        /// </summary>
-        protected ShaderPass DefaultShaderPass
-        {
-            private set
-            {
-                if(Set(ref defaultShaderPass, value))
-                {
-                    OnDefaultPassChanged(value);
-                    InvalidateRenderer();
-                }
-            }
-            get
-            {
-                return defaultShaderPass;
-            }
-        }
-
-        private ShaderPass shadowPass = ShaderPass.NullPass;
-        /// <summary>
-        /// 
-        /// </summary>
-        protected ShaderPass ShadowPass
-        {
-            private set
-            {
-                if(Set(ref shadowPass, value))
-                {
-                    OnShadowPassChanged(value);
-                    InvalidateRenderer();
-                }
-            }
-            get
-            {
-                return shadowPass;
-            }
-        }
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GeometryRenderCore{MODELSTRUCT}"/> class.
-        /// </summary>
-        public GeometryRenderCore() : base(RenderType.Opaque) { }
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GeometryRenderCore{MODELSTRUCT}"/> class.
-        /// </summary>
-        /// <param name="renderType">Type of the render.</param>
-        public GeometryRenderCore(RenderType renderType) : base(renderType) { }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="description"></param>
-        /// <param name="force"></param>
-        /// <returns></returns>
-        protected virtual bool CreateRasterState(RasterizerStateDescription description, bool force)
-        {
-            RemoveAndDispose(ref rasterState);
-            RemoveAndDispose(ref invertCullModeState);
-            rasterState = Collect(EffectTechnique.EffectsManager.StateManager.Register(description));
-            var invCull = description;
-            if(description.CullMode != CullMode.None)
-            {
-                invCull.CullMode = description.CullMode == CullMode.Back ? CullMode.Front : CullMode.Back;
-            }
-            invertCullModeState = Collect(EffectTechnique.EffectsManager.StateManager.Register(invCull));
-            return true;
-        }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="technique"></param>
-        /// <returns></returns>
-        protected override bool OnAttach(IRenderTechnique technique)
-        {
-            if(base.OnAttach(technique))
-            {
-                DefaultShaderPass = technique[DefaultShaderPassName];
-                ShadowPass = technique[DefaultShadowPassName];
                 CreateRasterState(rasterDescription, true);       
                 return true;
             }
-            return false;
-        }
 
-        protected override void OnDetach()
-        {
-            rasterState = null;
-            invertCullModeState = null;
-            base.OnDetach();
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="pass"></param>
-        protected virtual void OnDefaultPassChanged(ShaderPass pass) { }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="pass"></param>
-        protected virtual void OnShadowPassChanged(ShaderPass pass) { }
-        /// <summary>
-        /// Called when [geometry buffer changed].
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        protected virtual void OnGeometryBufferChanged(IAttachableBufferModel buffer) { }
-        /// <summary>
-        /// Set all necessary states and buffers
-        /// </summary>
-        /// <param name="context"></param>
-        /// <param name="isInvertCullMode"></param>
-        protected override void OnBindRasterState(DeviceContextProxy context, bool isInvertCullMode)
-        {
-            if (isInvertCullMode && invertCullModeState != null)
+            protected override void OnDetach()
             {
-                context.SetRasterState(invertCullModeState);
+                rasterState = null;
+                invertCullModeState = null;
+                base.OnDetach();
             }
-            else
-            {
-                context.SetRasterState(rasterState);
-            }
-        }
-        /// <summary>
-        /// Attach vertex buffer routine
-        /// </summary>
-        /// <param name="context"></param>
-        /// <param name="vertStartSlot"></param>
-        protected override bool OnAttachBuffers(DeviceContextProxy context, ref int vertStartSlot)
-        {
-            bool succ = GeometryBuffer.AttachBuffers(context, ref vertStartSlot, EffectTechnique.EffectsManager);
-            InstanceBuffer?.AttachBuffer(context, ref vertStartSlot);
-            return succ;
-        }
-        /// <summary>
-        /// Called when [update can render flag].
-        /// </summary>
-        /// <returns></returns>
-        protected override bool OnUpdateCanRenderFlag()
-        {
-            return base.OnUpdateCanRenderFlag() && GeometryBuffer != null;
-        }
+            /// <summary>
+            /// Called when [geometry buffer changed].
+            /// </summary>
+            /// <param name="buffer">The buffer.</param>
+            protected virtual void OnGeometryBufferChanged(IAttachableBufferModel buffer) { }
 
-        /// <summary>
-        /// Draw call
-        /// </summary>
-        /// <param name="context"></param>
-        /// <param name="instanceModel"></param>
-        protected virtual void OnDraw(DeviceContextProxy context, IElementsBufferModel instanceModel)
-        {
-            if (GeometryBuffer.IndexBuffer != null)
+            /// <summary>
+            /// Set all necessary states and buffers
+            /// </summary>
+            /// <param name="context"></param>
+            /// <param name="isInvertCullMode"></param>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            protected void OnBindRasterState(DeviceContextProxy context, bool isInvertCullMode)
             {
-                if (instanceModel == null || !instanceModel.HasElements)
+                context.SetRasterState(!isInvertCullMode ? rasterState : invertCullModeState);                
+            }
+
+            /// <summary>
+            /// Attach vertex buffer routine
+            /// </summary>
+            /// <param name="context"></param>
+            /// <param name="vertStartSlot"></param>
+            protected virtual bool OnAttachBuffers(DeviceContextProxy context, ref int vertStartSlot)
+            {
+                if(GeometryBuffer.AttachBuffers(context, ref vertStartSlot, EffectTechnique.EffectsManager))
                 {
-                    context.DrawIndexed(GeometryBuffer.IndexBuffer.ElementCount, 0, 0);
+                    InstanceBuffer?.AttachBuffer(context, ref vertStartSlot);
+                    return true;
                 }
                 else
                 {
-                    context.DrawIndexedInstanced(GeometryBuffer.IndexBuffer.ElementCount, instanceModel.Buffer.ElementCount, 0, 0, 0);
+                    return false;
                 }
             }
-            else if (GeometryBuffer.VertexBuffer.Length > 0)
+            /// <summary>
+            /// Called when [update can render flag].
+            /// </summary>
+            /// <returns></returns>
+            protected override bool OnUpdateCanRenderFlag()
             {
-                if (instanceModel == null || !instanceModel.HasElements)
+                return base.OnUpdateCanRenderFlag() && GeometryBuffer != null;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static void DrawIndexed(DeviceContextProxy context, IElementsBufferProxy indexBuffer, IElementsBufferModel instanceModel)
+            {
+                if (!instanceModel.HasElements)
                 {
-                    context.Draw(GeometryBuffer.VertexBuffer[0].ElementCount, 0);
+                    context.DrawIndexed(indexBuffer.ElementCount, 0, 0);
                 }
                 else
                 {
-                    context.DrawInstanced(GeometryBuffer.VertexBuffer[0].ElementCount, instanceModel.Buffer.ElementCount,
-                        0, 0);
+                    context.DrawIndexedInstanced(indexBuffer.ElementCount, instanceModel.Buffer.ElementCount, 0, 0, 0);
                 }
             }
-        }
 
-        protected override void OnRenderShadow(RenderContext context, DeviceContextProxy deviceContext)
-        {
-            if (!IsThrowingShadow || ShadowPass.IsNULL)
-            { return; }
-            ShadowPass.BindShader(deviceContext);
-            ShadowPass.BindStates(deviceContext, ShadowStateBinding);
-            OnDraw(deviceContext, InstanceBuffer);
-        }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static void DrawPoints(DeviceContextProxy context, IElementsBufferProxy vertexBuffer, IElementsBufferModel instanceModel)
+            {
+                if (!instanceModel.HasElements)
+                {
+                    context.Draw(vertexBuffer.ElementCount, 0);
+                }
+                else
+                {
+                    context.DrawInstanced(vertexBuffer.ElementCount, instanceModel.Buffer.ElementCount, 0, 0);
+                }
+            }
 
-        protected override void OnRenderCustom(RenderContext context, DeviceContextProxy deviceContext, ShaderPass shaderPass)
-        {
-            OnDraw(deviceContext, InstanceBuffer);
-        }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            protected bool PreRender(RenderContext context, DeviceContextProxy deviceContext)
+            {
+                if (CanRenderFlag)
+                {
+                    int vertStartSlot = 0;
+                    if (!OnAttachBuffers(deviceContext, ref vertStartSlot))
+                    {
+                        return false;
+                    }
+                    OnBindRasterState(deviceContext, context.IsInvertCullMode);
+                }
+                return CanRenderFlag;
+            }
 
-        protected void OnElementChanged(object sender, EventArgs e)
-        {
-            UpdateCanRenderFlag();
-            InvalidateRenderer();
-        }
+            /// <summary>
+            /// Trigger OnRender function delegate if CanRender()==true
+            /// </summary>
+            /// <param name="context"></param>
+            /// <param name="deviceContext"></param>
+            public sealed override void Render(RenderContext context, DeviceContextProxy deviceContext)
+            {
+                if (PreRender(context, deviceContext))
+                {
+                    OnRender(context, deviceContext);
+                }
+            }
 
-        protected void OnInvalidateRendererEvent(object sender, EventArgs e)
-        {
-            InvalidateRenderer();
+
+            public sealed override void RenderShadow(RenderContext context, DeviceContextProxy deviceContext)
+            {
+                if (PreRender(context, deviceContext))
+                {               
+                    OnRenderShadow(context, deviceContext);
+                }
+            }
+
+            public sealed override void RenderCustom(RenderContext context, DeviceContextProxy deviceContext)
+            {
+                if (PreRender(context, deviceContext))
+                {
+                    OnRenderCustom(context, deviceContext);
+                }
+            }
+
+            public sealed override void RenderDepth(RenderContext context, DeviceContextProxy deviceContext, ShaderPass customPass)
+            {
+                if (PreRender(context, deviceContext))
+                {
+                    OnRenderDepth(context, deviceContext, customPass);
+                }
+            }
+            /// <summary>
+            /// Called when [render].
+            /// </summary>
+            /// <param name="context">The context.</param>
+            /// <param name="deviceContext">The device context.</param>
+            protected abstract void OnRender(RenderContext context, DeviceContextProxy deviceContext);
+
+            /// <summary>
+            /// Render function for custom shader pass. Used to do special effects
+            /// </summary>
+            protected abstract void OnRenderCustom(RenderContext context, DeviceContextProxy deviceContext);
+
+            /// <summary>
+            /// Called when [render shadow].
+            /// </summary>
+            /// <param name="context">The context.</param>
+            /// <param name="deviceContext"></param>
+            protected abstract void OnRenderShadow(RenderContext context, DeviceContextProxy deviceContext);
+            /// <summary>
+            /// Called when [render depth].
+            /// </summary>
+            /// <param name="context">The context.</param>
+            /// <param name="deviceContext">The device context.</param>
+            /// <param name="customPass">Custom depth pass</param>
+            protected abstract void OnRenderDepth(RenderContext context, DeviceContextProxy deviceContext, ShaderPass customPass);
+
+            protected void OnElementChanged(object sender, EventArgs e)
+            {
+                UpdateCanRenderFlag();
+                RaiseInvalidateRender();
+            }
+
+            protected void OnInvalidateRendererEvent(object sender, EventArgs e)
+            {
+                RaiseInvalidateRender();
+            }
         }
     }
+
 }

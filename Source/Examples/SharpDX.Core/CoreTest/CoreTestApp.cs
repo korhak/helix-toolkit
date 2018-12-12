@@ -1,11 +1,12 @@
 ﻿//#define TESTADDREMOVE
 
 using HelixToolkit.SharpDX.Core.Controls;
-using HelixToolkit.UWP;
-using HelixToolkit.UWP.Cameras;
-using HelixToolkit.UWP.Core;
-using HelixToolkit.UWP.Model;
-using HelixToolkit.UWP.Model.Scene;
+using HelixToolkit.SharpDX.Core.Model;
+using HelixToolkit.SharpDX.Core;
+using HelixToolkit.SharpDX.Core.Cameras;
+using HelixToolkit.SharpDX.Core.Model.Scene;
+using HelixToolkit.SharpDX.Core.Shaders;
+using ImGuiNET;
 using SharpDX;
 using SharpDX.Windows;
 using System;
@@ -25,31 +26,76 @@ namespace CoreTest
         private readonly EffectsManager effectsManager;
         private CameraCore camera;
         private Geometry3D box, sphere, points, lines;
-        private GroupNode groupSphere, groupBox, groupPoints, groupLines;
-        private const int NumItems = 2000;
+        private GroupNode groupSphere, groupBox, groupPoints, groupLines, groupModel;
+        private DirectionalLightNode directionalLight;
+        private AmbientLightNode ambientLight;
+        private const int NumItems = 40;
         private Random rnd = new Random((int)Stopwatch.GetTimestamp());
         private Dictionary<string, MaterialCore> materials = new Dictionary<string, MaterialCore>();
         private MaterialCore[] materialList;
         private long previousTime;
         private bool resizeRequested = false;
+        private IO io = ImGui.GetIO();
+        private CameraController cameraController;
+
+        private struct ViewportOptions
+        {
+            public bool DirectionalLightFollowCamera;
+            public bool WalkAround;
+            public bool EnableSSAO;
+            public bool EnableFXAA;
+            public bool EnableFrustum;
+            public System.Numerics.Vector3 BackgroundColor;
+            public float DirectionLightIntensity;
+            public float AmbientLightIntensity;
+        }
+
+        private ViewportOptions options = new ViewportOptions()
+        {
+            BackgroundColor = new System.Numerics.Vector3(0.4f, 0.4f, 0.4f),
+            EnableFrustum = true,
+            EnableFXAA = true,
+            EnableSSAO = true,
+            DirectionalLightFollowCamera = true,
+            DirectionLightIntensity = 0.6f,
+            AmbientLightIntensity = 0.4f
+        };
 
         public CoreTestApp(Form window)
         {
             viewport = new ViewportCore(window.Handle);
+            cameraController = new CameraController(viewport);
+            cameraController.CameraMode = CameraMode.Inspect;
+            cameraController.CameraRotationMode = CameraRotationMode.Trackball;
             this.window = window;
             window.ResizeEnd += Window_ResizeEnd;
             window.Load += Window_Load;
             window.FormClosing += Window_FormClosing;
+            window.MouseMove += Window_MouseMove;
+            window.MouseDown += Window_MouseDown;
+            window.MouseUp += Window_MouseUp;
+            window.MouseWheel += Window_MouseWheel;
+            window.KeyDown += Window_KeyDown;
+            window.KeyUp += Window_KeyUp;
+            window.KeyPress += Window_KeyPress;
             effectsManager = new DefaultEffectsManager();
+            effectsManager.AddTechnique(ImGuiNode.RenderTechnique);
             viewport.EffectsManager = effectsManager;           
             viewport.OnStartRendering += Viewport_OnStartRendering;
             viewport.OnStopRendering += Viewport_OnStopRendering;
             viewport.OnErrorOccurred += Viewport_OnErrorOccurred;
-            viewport.FXAALevel = FXAALevel.Low;
-            //viewport.RenderHost.EnableRenderFrustum = false;
-            viewport.RenderHost.RenderConfiguration.EnableRenderOrder = true;
+            AssignViewportOption();
             InitializeScene();
         }
+
+        private void AssignViewportOption()
+        {
+            viewport.FXAALevel = options.EnableFXAA ? FXAALevel.Low : FXAALevel.None;
+            viewport.EnableRenderFrustum = options.EnableFrustum;
+            viewport.BackgroundColor = new Color4(options.BackgroundColor.X, options.BackgroundColor.Y, options.BackgroundColor.Z, 1);
+            viewport.EnableSSAO = options.EnableSSAO;
+        }
+
 
         private void InitializeScene()
         {
@@ -63,9 +109,21 @@ namespace CoreTest
                 UpDirection = new Vector3(0, 1, 0)
             };
             viewport.CameraCore = camera;
-            viewport.Items.Add(new DirectionalLightNode() { Direction = new Vector3(0, -1, 1), Color = Color.White });
-            viewport.Items.Add(new PointLightNode() { Position = new Vector3(0, 0, -20), Color = Color.Yellow, Range = 20, Attenuation = Vector3.One });
+            directionalLight = new DirectionalLightNode()
+            {
+                Direction = new Vector3(0, -1, 1),
+                Color = Color.White.ToColor4().ChangeIntensity(options.DirectionLightIntensity)
+            };
+            viewport.Items.AddChildNode(directionalLight);
 
+            ambientLight = new AmbientLightNode()
+            {
+                Color = Color.White.ToColor4().ChangeIntensity(options.AmbientLightIntensity)
+            };
+            viewport.Items.AddChildNode(ambientLight);
+
+            groupModel = new GroupNode();
+            viewport.Items.AddChildNode(groupModel);
             var builder = new MeshBuilder(true, true, true);
             builder.AddSphere(Vector3.Zero, 1, 12, 12);
             sphere = builder.ToMesh();
@@ -96,25 +154,142 @@ namespace CoreTest
                 groupBox.AddChildNode(new MeshNode() { Geometry = box, Material = materialList[i % materialCount], ModelMatrix = transform, CullMode = SharpDX.Direct3D11.CullMode.Back });
             }
 
-            for(int i=0; i< NumItems; ++i)
-            {
-                var transform = Matrix.Translation(new Vector3(rnd.NextFloat(-50, 50), rnd.NextFloat(-50, 50), rnd.NextFloat(-50, 50)));
-                groupPoints.AddChildNode(new PointNode() { Geometry = points, ModelMatrix = transform, Color = Color.Red, Size = new Size2F(0.5f, 0.5f) });
-            }
+            //for(int i=0; i< NumItems; ++i)
+            //{
+            //    var transform = Matrix.Translation(new Vector3(rnd.NextFloat(-50, 50), rnd.NextFloat(-50, 50), rnd.NextFloat(-50, 50)));
+            //    groupPoints.AddChildNode(new PointNode() { Geometry = points, ModelMatrix = transform, Material = new PointMaterialCore() { PointColor = Color.Red } });
+            //}
 
-            for (int i = 0; i < NumItems; ++i)
-            {
-                var transform = Matrix.Translation(new Vector3(rnd.NextFloat(-50, 50), rnd.NextFloat(-50, 50), rnd.NextFloat(-50, 50)));
-                groupLines.AddChildNode(new LineNode() { Geometry = lines, ModelMatrix = transform, Color = Color.LightBlue, Thickness = 0.5f });
-            }
+            //for (int i = 0; i < NumItems; ++i)
+            //{
+            //    var transform = Matrix.Translation(new Vector3(rnd.NextFloat(-50, 50), rnd.NextFloat(-50, 50), rnd.NextFloat(-50, 50)));
+            //    groupLines.AddChildNode(new LineNode() { Geometry = lines, ModelMatrix = transform, Material = new LineMaterialCore() { LineColor = Color.LightBlue } });
+            //}
 
-            viewport.Items.Add(groupSphere);
+            groupModel.AddChildNode(groupSphere);
             groupSphere.AddChildNode(groupBox);
             groupSphere.AddChildNode(groupPoints);
             groupSphere.AddChildNode(groupLines);
 
             var viewbox = new ViewBoxNode();
-            viewport.Items.Add(viewbox);
+            viewport.Items.AddChildNode(viewbox);
+            var imGui = new ImGuiNode();
+            viewport.Items.AddChildNode(imGui);
+            imGui.UpdatingImGuiUI += ImGui_UpdatingImGuiUI;
+            io.KeyMap[GuiKey.Tab] = (int)Keys.Tab;
+            io.KeyMap[GuiKey.LeftArrow] = (int)Keys.Left;
+            io.KeyMap[GuiKey.RightArrow] = (int)Keys.Right;
+            io.KeyMap[GuiKey.UpArrow] = (int)Keys.Up;
+            io.KeyMap[GuiKey.DownArrow] = (int)Keys.Down;
+            io.KeyMap[GuiKey.PageUp] = (int)Keys.PageUp;
+            io.KeyMap[GuiKey.PageDown] = (int)Keys.PageDown;
+            io.KeyMap[GuiKey.Home] = (int)Keys.Home;
+            io.KeyMap[GuiKey.End] = (int)Keys.End;
+            io.KeyMap[GuiKey.Delete] = (int)Keys.Delete;
+            io.KeyMap[GuiKey.Backspace] = (int)Keys.Back;
+            io.KeyMap[GuiKey.Enter] = (int)Keys.Enter;
+            io.KeyMap[GuiKey.Escape] = (int)Keys.Escape;
+        }
+
+
+        private bool showImGuiDemo = false;
+
+        private void ImGui_UpdatingImGuiUI(object sender, EventArgs e)
+        {
+            ImGui.SetNextWindowPos(System.Numerics.Vector2.Zero, Condition.Always, System.Numerics.Vector2.Zero);
+            ImGui.SetNextWindowSize(new System.Numerics.Vector2(viewport.Width, viewport.Height), Condition.Always);
+            bool opened = false;
+            if (ImGui.BeginWindow("Model Loader Window", ref opened, 0,
+                WindowFlags.MenuBar | WindowFlags.NoResize | WindowFlags.NoMove | WindowFlags.NoScrollbar | WindowFlags.NoCollapse))
+            {
+                if (ImGui.BeginMenuBar())
+                {
+                    if (ImGui.BeginMenu("Load Model"))
+                    {
+                        if (ImGui.MenuItem("Open"))
+                        {
+                            LoadModel();
+                        }
+                        ImGui.EndMenu();
+                    }
+                    if (ImGui.BeginMenu("Options"))
+                    {
+                        ImGui.Checkbox("Dir Light Follow Camera", ref options.DirectionalLightFollowCamera);
+                        ImGui.SliderFloat("Dir Light Intensity", ref options.DirectionLightIntensity, 0, 1, "", 1);
+                        ImGui.SliderFloat("Ambient Light Intensity", ref options.AmbientLightIntensity, 0, 1, "", 1);
+                        ImGui.Spacing();
+                        ImGui.Checkbox("Enable SSAO", ref options.EnableSSAO);
+                        ImGui.Checkbox("Enable FXAA", ref options.EnableFXAA);
+                        ImGui.Checkbox("Enable Frustum", ref options.EnableFrustum);
+                        ImGui.Spacing();
+                        ImGui.ColorPicker3("Background Color", ref options.BackgroundColor);
+                        ImGui.EndMenu();
+                    }
+                    if(!showImGuiDemo && ImGui.BeginMenu("ImGui Demo"))
+                    {
+                        if (ImGui.MenuItem("Show"))
+                        {
+                            showImGuiDemo = true;
+                        }                       
+                        ImGui.EndMenu();
+                    }
+                    ImGui.EndMenuBar();
+                }
+                if (ImGui.CollapsingHeader("Mouse Gestures", TreeNodeFlags.DefaultOpen))
+                {
+                    ImGui.Text("Mouse Right: Rotate");
+                    ImGui.Text("Mouse Middle: Pan");
+                }
+                ImGui.Spacing();
+                if (ImGui.CollapsingHeader("Scene Graph", TreeNodeFlags.DefaultOpen))
+                {
+                    DrawSceneGraph(groupModel);
+                }
+
+                ImGui.EndWindow();
+            }
+            if (showImGuiDemo)
+            {
+                opened = false;
+                ImGuiNative.igShowDemoWindow(ref showImGuiDemo);
+            }
+        }
+
+        private void DrawSceneGraph(SceneNode node)
+        {
+            if(node.Name == null)
+            {
+                return;
+            }
+            if(node.Items.Count > 0)
+            {
+                if (ImGui.TreeNode(node.Name))
+                {
+                    foreach(var n in node.Items)
+                    {
+                        DrawSceneGraph(n);
+                    }
+                    ImGui.TreePop();
+                }
+            }
+            else
+            {
+                ImGui.Text(node.Name);
+            }
+        }
+
+        private void LoadModel()
+        {
+            OpenFileDialog dialog = new OpenFileDialog();
+            //dialog.Filter = "3D model files (*.obj;*.3ds;*.stl|*.obj;*.3ds;*.stl;*.ply;";
+            if (dialog.ShowDialog() == DialogResult.OK)
+            {
+                var path = dialog.FileName;
+                var importer = new HelixToolkit.SharpDX.Core.Assimp.Importer();
+                var group = importer.Load(path);
+                groupModel.Clear();
+                groupModel.AddChildNode(group);
+            }
         }
 
         private void InitializeMaterials()
@@ -157,36 +332,26 @@ namespace CoreTest
             {
                 if (resizeRequested)
                 {
-                    viewport.Resize(window.Width, window.Height);
+                    viewport.Resize(window.ClientSize.Width, window.ClientSize.Height);
                     resizeRequested = false;
                     return;
                 }
+
                 var pos = camera.Position;
                 var t = Stopwatch.GetTimestamp();
                 var elapse = t - previousTime;
                 previousTime = t;
-                var angle = ((double)elapse / Stopwatch.Frequency) * 0.05;
-                var camRotate = Matrix.RotationAxis(Vector3.UnitY, (float)(angle * Math.PI));
-                camera.Position = Vector3.TransformCoordinate(pos, camRotate);
-                camera.LookDirection = -camera.Position;
-                if (isGoingOut)
+                cameraController.OnTimeStep();
+                if (options.DirectionalLightFollowCamera)
                 {
-                    camera.Position += 0.05f * Vector3.Normalize(camera.Position);
-                    if(camera.Position.LengthSquared() > 10000)
-                    {
-                        isGoingOut = false;
-                    }
+                    directionalLight.Direction = camera.LookDirection.Normalized();
                 }
-                else
-                {
-                    camera.Position -= 0.05f * Vector3.Normalize(camera.Position);
-                    if(camera.Position.LengthSquared() < 2500)
-                    {
-                        isGoingOut = true;
-                    }
-                }
+                AssignViewportOption();
+                directionalLight.Color = Color.White.ToColor4().ChangeIntensity(options.DirectionLightIntensity);
+                ambientLight.Color = Color.White.ToColor4().ChangeIntensity(options.AmbientLightIntensity);
                 viewport.Render();
-                viewport.InvalidateRender();
+
+                
 #if TESTADDREMOVE
                 if (groupSphere.Items.Count > 0 && !isAddingNode)
                 {
@@ -228,7 +393,131 @@ namespace CoreTest
 
         private void Window_Load(object sender, EventArgs e)
         {
-            viewport.StartD3D(window.Width, window.Height);
+            viewport.StartD3D(window.ClientSize.Width, window.ClientSize.Height);
         }
+        #region Handle mouse event
+        private void Window_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!cameraController.IsMouseCaptured)
+            {
+                io.MousePosition = new System.Numerics.Vector2(e.X, e.Y);
+            }
+            else if (!io.WantCaptureMouse)
+            {
+                cameraController.MouseMove(new Vector2(e.X, e.Y));
+            }
+        }
+
+        private void Window_MouseUp(object sender, MouseEventArgs e)
+        {
+            switch (e.Button)
+            {
+                case MouseButtons.Left:
+                    io.MouseDown[0] = false;
+                    break;
+                case MouseButtons.Right:
+                    io.MouseDown[1] = false;
+                    break;
+                case MouseButtons.Middle:
+                    io.MouseDown[2] = false;
+                    break;
+            }
+            if (cameraController.IsMouseCaptured)
+            {
+                switch (e.Button)
+                {
+                    case MouseButtons.Left:
+                        break;
+                    case MouseButtons.Right:
+                        cameraController.EndRotate(new Vector2(e.X, e.Y));
+                        break;
+                    case MouseButtons.Middle:
+                        cameraController.EndPan(new Vector2(e.X, e.Y));
+                        break;
+                }
+            }
+        }
+
+        private void Window_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (!cameraController.IsMouseCaptured)
+            {
+                switch (e.Button)
+                {
+                    case MouseButtons.Left:
+                        io.MouseDown[0] = true;
+                        break;
+                    case MouseButtons.Right:
+                        io.MouseDown[1] = true;
+                        break;
+                    case MouseButtons.Middle:
+                        io.MouseDown[2] = true;
+                        break;
+                }
+                if (!io.WantCaptureMouse)
+                {
+                    switch (e.Button)
+                    {
+                        case MouseButtons.Left:
+                            break;
+                        case MouseButtons.Right:
+                            cameraController.StartRotate(new Vector2(e.X, e.Y));
+                            break;
+                        case MouseButtons.Middle:
+                            cameraController.StartPan(new Vector2(e.X, e.Y));
+                            break;
+                    }
+                }
+            }
+            else if(!io.WantCaptureMouse)
+            {
+                switch (e.Button)
+                {
+                    case MouseButtons.Left:
+                        break;
+                    case MouseButtons.Right:
+                        cameraController.StartRotate(new Vector2(e.X, e.Y));
+                        break;
+                    case MouseButtons.Middle:
+                        cameraController.StartPan(new Vector2(e.X, e.Y));
+                        break;
+                }
+            }
+        }
+
+        private void Window_MouseWheel(object sender, MouseEventArgs e)
+        {
+            if (!cameraController.IsMouseCaptured)
+            {
+                io.MouseWheel = (int)(e.Delta * 0.01f);
+            }
+            if(!io.WantCaptureMouse)
+            {
+                cameraController.MouseWheel(e.Delta, new Vector2(e.X, e.Y));
+            }
+        }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {        
+            io.KeysDown[e.KeyValue] = true;
+            io.ShiftPressed = e.Shift;
+            io.CtrlPressed = e.Control;
+            io.AltPressed = e.Alt;
+        }
+
+        private void Window_KeyUp(object sender, KeyEventArgs e)
+        {
+            io.KeysDown[e.KeyValue] = false;
+            io.ShiftPressed = e.Shift;
+            io.CtrlPressed = e.Control;
+            io.AltPressed = e.Alt;
+        }
+
+
+        private void Window_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            ImGui.AddInputCharacter(e.KeyChar);
+        }
+        #endregion
     }
 }

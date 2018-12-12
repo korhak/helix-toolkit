@@ -5,10 +5,14 @@ Copyright (c) 2018 Helix Toolkit contributors
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
-#if NETFX_CORE
-namespace HelixToolkit.UWP
-#else
+#if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
+#else
+#if CORE
+namespace HelixToolkit.SharpDX.Core
+#else
+namespace HelixToolkit.UWP
+#endif
 #endif
 {
     /// <summary>
@@ -91,7 +95,8 @@ namespace HelixToolkit.Wpf.SharpDX
         None = 0,
         RasterState = 1,
         DepthStencilState = 1 << 2,
-        BlendState = 1 << 3
+        BlendState = 1 << 3,
+        All = RasterState | DepthStencilState | BlendState
     }
 
     [Flags]
@@ -155,5 +160,45 @@ namespace HelixToolkit.Wpf.SharpDX
         /// The subtract operation.
         /// </summary>
         Subtract = 1,
+    }
+    /// <summary>
+    /// 
+    /// </summary>
+    public enum OutlineMode
+    {
+        Merged = 0,
+        Separated = 1
+    }
+    /// <summary>
+    /// 
+    /// </summary>
+    public enum Axis
+    {
+        X = 0,
+        Y = 1,
+        Z = 2
+    }
+    /// <summary>
+    /// 
+    /// </summary>
+    public enum GridPattern
+    {
+        Tile = 0,
+        Grid = 1
+    }
+
+    public enum OffScreenTextureSize
+    {
+        Full = 1, Half = 2, Quarter = 4
+    }
+
+    public enum OffScreenTextureType
+    {
+        RenderTarget, DepthStencil
+    }
+
+    public enum SSAOQuality
+    {
+        High, Low
     }
 }

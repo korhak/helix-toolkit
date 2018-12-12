@@ -72,7 +72,7 @@ namespace HelixToolkit.UWP
         /// <value>
         /// The camera core.
         /// </value>
-        public CameraCore CameraCore { get { return this.Camera; } }
+        public CameraCore CameraCore { get { return this.cameraController.ActualCamera; } }
         /// <summary>
         /// Gets the items.
         /// </summary>
@@ -139,6 +139,7 @@ namespace HelixToolkit.UWP
         /// </summary>
         public RenderContext RenderContext { get { return this.renderHostInternal?.RenderContext; } }
 
+        public Rectangle ViewportRectangle { get { return new Rectangle(0, 0, (int)ActualWidth, (int)ActualHeight); } }
         /// <summary>
         /// Gets or sets the render host internal.
         /// </summary>
@@ -279,6 +280,12 @@ namespace HelixToolkit.UWP
                     itemsContainer.Items.Add(item);
                 }
             }
+
+            if (hostPresenter != null)
+            {
+                renderHostInternal.Rendered -= this.RaiseRenderHostRendered;
+                renderHostInternal.ExceptionOccurred -= RenderHostInternal_ExceptionOccurred;
+            }
             hostPresenter = GetTemplateChild(ViewportPartNames.PART_HostPresenter) as ContentPresenter;
             if (hostPresenter != null)
             {
@@ -290,7 +297,6 @@ namespace HelixToolkit.UWP
                     renderHostInternal.Viewport = this;
                     renderHostInternal.IsRendering = Visibility == Visibility.Visible;
                     renderHostInternal.EffectsManager = this.EffectsManager;
-                    renderHostInternal.RenderTechnique = this.RenderTechnique;
                     renderHostInternal.ClearColor = this.BackgroundColor.ToColor4();
                     renderHostInternal.EnableRenderFrustum = this.EnableRenderFrustum;
                     renderHostInternal.IsShadowMapEnabled = this.IsShadowMappingEnabled;
@@ -306,9 +312,11 @@ namespace HelixToolkit.UWP
                     renderHostInternal.RenderConfiguration.OITWeightMode = OITWeightMode;
                     renderHostInternal.RenderConfiguration.FXAALevel = FXAALevel;
                     renderHostInternal.RenderConfiguration.EnableRenderOrder = EnableRenderOrder;
-                    renderHostInternal.OnRendered -= this.OnRendered;
-                    renderHostInternal.OnRendered += this.OnRendered;
-                    renderHostInternal.ExceptionOccurred -= RenderHostInternal_ExceptionOccurred;
+                    renderHostInternal.RenderConfiguration.EnableSSAO = EnableSSAO;
+                    renderHostInternal.RenderConfiguration.SSAORadius = (float)SSAOSamplingRadius;
+                    renderHostInternal.RenderConfiguration.SSAOIntensity = (float)SSAOIntensity;
+                    renderHostInternal.RenderConfiguration.SSAOQuality = SSAOQuality;
+                    renderHostInternal.Rendered += this.RaiseRenderHostRendered;
                     renderHostInternal.ExceptionOccurred += RenderHostInternal_ExceptionOccurred;
 
                     if (ShowFrameRate)
@@ -348,10 +356,6 @@ namespace HelixToolkit.UWP
             if(viewCube == null)
             {
                 viewCube = GetTemplateChild(ViewportPartNames.PART_ViewCube) as ViewBoxModel3D;
-                if(viewCube != null)
-                {
-                    viewCube.ViewBoxClickedEvent += ViewCube_ViewBoxClickedEvent;
-                }
             }
 
             if (viewCube == null)
@@ -519,6 +523,16 @@ namespace HelixToolkit.UWP
             var hits = new List<HitTestResult>();
             if (viewCube.HitTest(RenderContext, ray, ref hits))
             {
+                var normal = hits[0].NormalAtHit;
+                if (Vector3.Cross(normal, ModelUpDirection).LengthSquared() < 1e-5)
+                {
+                    var vecLeft = new Vector3(-normal.Y, -normal.Z, -normal.X);
+                    ViewCubeClicked(hits[0].NormalAtHit, vecLeft);
+                }
+                else
+                {
+                    ViewCubeClicked(hits[0].NormalAtHit, ModelUpDirection);
+                }
                 return true;
             }
             else
@@ -527,7 +541,7 @@ namespace HelixToolkit.UWP
             }
         }
 
-        private void ViewCube_ViewBoxClickedEvent(object sender, ViewBoxNode.ViewBoxClickedEventArgs e)
+        private void ViewCubeClicked(Vector3 lookDirection, Vector3 upDirection)
         {
             if (!(this.Camera is ProjectionCamera pc))
             {
@@ -536,9 +550,9 @@ namespace HelixToolkit.UWP
 
             var target = pc.Position + pc.LookDirection;
             float distance = pc.LookDirection.Length();
-            var look = e.LookDirection * distance;
+            var look = lookDirection * distance;
             var newPosition = target - look;
-            pc.AnimateTo(newPosition, look, e.UpDirection, 500);
+            pc.AnimateTo(newPosition, look, upDirection, 500);
         }
 
         /// <summary>
@@ -559,9 +573,9 @@ namespace HelixToolkit.UWP
             if (hits.Count > 0)
             {
                 this.currentHit = hits.FirstOrDefault(x => x.IsValid);
-                if (this.currentHit != null)
+                if (this.currentHit != null && currentHit.ModelHit is Element3D ele)
                 {
-                    (this.currentHit.ModelHit as Element3D)?.RaiseMouseDownEvent(this.currentHit, pt, this);
+                    ele.RaiseMouseDownEvent(this.currentHit, pt, this);
                 }
             }
             else
@@ -583,9 +597,9 @@ namespace HelixToolkit.UWP
             {
                 return;
             }
-            if (this.currentHit != null)
+            if (this.currentHit != null && currentHit.ModelHit is Element3D ele)
             {
-                (this.currentHit.ModelHit as Element3D)?.RaiseMouseMoveEvent(this.currentHit, pt, this);
+                ele.RaiseMouseMoveEvent(this.currentHit, pt, this);
             }
             this.OnMouse3DMove?.Invoke(this, new MouseMove3DEventArgs(currentHit, pt, this));
         }
@@ -602,9 +616,9 @@ namespace HelixToolkit.UWP
             {
                 return;
             }
-            if (currentHit != null)
+            if (currentHit != null && currentHit.ModelHit is Element3D ele)
             {
-                (this.currentHit.ModelHit as Element3D)?.RaiseMouseUpEvent(this.currentHit, pt, this);               
+                ele.RaiseMouseUpEvent(this.currentHit, pt, this);               
                 currentHit = null;
             }
             this.OnMouse3DUp?.Invoke(this, new MouseUp3DEventArgs(currentHit, pt, this));
@@ -771,6 +785,12 @@ namespace HelixToolkit.UWP
         public void LookAt(Vector3 p, double animationTime)
         {
             this.CameraController?.ActualCamera?.LookAt(p, animationTime);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void RaiseRenderHostRendered(object sender, EventArgs e)
+        {
+            this.OnRendered?.Invoke(sender, e);
         }
     }
 }

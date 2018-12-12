@@ -1,17 +1,80 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## Next Release
+## [Next Version]
 ### Added
+1. Volume 3D Texture Rendering. [Demo](https://github.com/helix-toolkit/helix-toolkit/tree/develop/Source/Examples/WPF.SharpDX/VolumeRendering) is added.
+2. Supports [ImGui](https://github.com/ocornut/imgui) (using [ImGui.NET](https://github.com/mellinoe/ImGui.NET)) for SharpDX.Core. Details refer to [CoreTest demo](https://github.com/helix-toolkit/helix-toolkit/tree/develop/Source/Examples/SharpDX.Core/CoreTest).
+3. Supports Line/Point non-fixedSize thickness rendering.
+4. Supports SSAO.
+5. Adds Assimp Import/Export support for SharpDX versions.
 
 ### Improvement and Changes
-1. Move render environment map and render shadow map into PhongMaterial. (WPF.SharpDX and UWP)
+1. Add FastList and change Vector3Collection/IntCollection base class to FastList for direct underlying array access.
+2. Improved off-screen texture pooling.
+3. Improved post effects quality.
+4. Fixed Material creation performance issue.
+
+### Fixed
+1. Make DPFCanvas work over Remote Desktop again #998. (WPF.SharpDX and UWP)
+2. Transparent sorting and materials (SharpDX) #994. (WPF.SharpDX and UWP)
+3. Fixed manual render order not working issue. (WPF.SharpDX and UWP)
+4. TaskCanceledException not caught in OnDetached #988. (WPF.SharpDX and UWP)
+5. ViewCube is acting on Mouse Move #969. (WPF.SharpDX and UWP)
+6. LookDirection length in FitView #1009 (WPF) 
+
+## [2.5.1] - 2018-10-24
+Hot fix for v2.5.0.
+### Fixed
+1. Fixed wrong type cast while using custom ViewBox Texture in HelixToolkit.SharpDX and UWP. (WPF.SharpDX and UWP)
+
+## [2.5.0] - 2018-10-19
+### Added
+1. Physics Based Rendering Material. (WPF.SharpDX and UWP)
+2. ScreenQuadModel3D for background full screen texture rendering.(WPF.SharpDX and UWP)
+3. Supports EmissiveMap for PhongMaterial. (WPF.SharpDX and UWP)
+4. Supports Billboard 2D Rotation. Added Angle property in TextInfo and BillboardSingleImage. (WPF.SharpDX and UWP)
+5. Add BillboardImage3D to support sub image texture billboard. (WPF.SharpDX and UWP)
+6. Supports custom bitmap font for BillboardText3D. (WPF.SharpDX and UWP)
+7. Supports Billboard Text Batching [Wiki](https://github.com/helix-toolkit/helix-toolkit/wiki/Billboard-Types-and-Usage). (WPF.SharpDX and UWP)
+7. Supports UnLit for DiffuseMaterial. (WPF.SharpDX and UWP)
+
+### Improvement and Changes
+1. Clean up render core. Obsolete RenderCoreBase. Move to material based rendering. (WPF.SharpDX and UWP)
+2. Remove "On" prefix from events. #924 (WPF.SharpDX and UWP)
+3. Upgrade SharpDX version to 4.2.0. (WPF.SharpDX and UWP)
+4. Shader common buffer and sampler changes. Use single surface sampler for all surface maps in pixel shader. Obsolete NormalMapSampler, AlphaMapSampler etc. in PhongMaterial. Please update common.hlsl if you are using custom shaders. (WPF.SharpDX and UWP)
+5. Improve MaterialVariable. (WPF.SharpDX and UWP)
+
+### Fixed
+1. Transparency of the material SharpDX UWP bug #925  (WPF.SharpDX and UWP)
+2. stl material issue #917 (WPF)
+3. Is it possible to render the content of a Viewport3DX to an image (png/bmp) with higher DPI? #920 (WPF.SharpDX and UWP)
+4. NullRef Exception in BufferComponent (SharpDX) SharpDX UWP bug taken #966  (WPF.SharpDX and UWP)
+5. Recover from DXGI_ERROR_DEVICE_REMOVED / DXGI_ERROR_DEVICE_RESET #963 (WPF.SharpDX and UWP)
+
+## [2.4.0] - 2018-8-26
+### Added
+1. Axis aligned plane grid. (WPF.SharpDX and UWP)
+2. CMO Reader. (WPF.SharpDX and UWP)
+3. Animation KeyframeUpdater. (WPF.SharpDX and UWP)
+4. Added UV Transform in PhongMaterial/DiffuseMaterial (WPF.SharpDX and UWP).
+5. Added custom billboard texture sampler.
+
+### Improvement and Changes
+1. Move render environment map and render shadow map properties into PhongMaterial. (WPF.SharpDX and UWP)
 2. Includes material sorting if EnableRenderOrder = true. Update RenderOrder to ushort. Update sorting key to be uint = [RenderOrder, MaterialID]. (WPF.SharpDX and UWP)
 3. MaterialVariable pooling. (WPF.SharpDX and UWP)
+4. Obsolete BoneMatrices struct. Improve BoneSkinnedGeomerty3D. Directly Martix array binding for bones. Add BoneGroupModel3D for bone sharing. Implemented basic key frame animation support and [Demo](https://github.com/helix-toolkit/helix-toolkit/tree/develop/Source/Examples/WPF.SharpDX/BoneSkinDemo). (WPF.SharpDX and UWP)
+5. Performance improvement.
 
 ### Fixed
 1. Fix bug on DisposeAndClear not called during detaching scene node. (WPF.SharpDX and UWP)
 2. Fix bug on invalidate scene graph not working on detaching scene node. (WPF.SharpDX and UWP)
+3. Instanced models are not properly exported using ObjExporter #902 (WPF.SharpDX)
+4. Coordinate system and view cube are clipped when resizing the Viewport3DX #892 (WPF.SharpDX and UWP)
+5. Wrong Y texture coordinate #870 (WPF.SharpDX and UWP)
+6. ObjExporter export MeshGeometryModel3D fails #857 (WPF.SharpDX)
 
 ## [2.3.0] - 2018-7-22
 ### Added
