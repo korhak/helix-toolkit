@@ -9,7 +9,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Collections.ObjectModel;
-
+using System.ComponentModel;
+using System.Diagnostics;
 #if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
 #else
@@ -23,12 +24,13 @@ namespace HelixToolkit.UWP
     namespace Model.Scene
     {
         using Core;
-        using Render;       
+        using Render;     
 
         /// <summary>
         ///
         /// </summary>
-        public abstract partial class SceneNode : DisposeObject, IComparable<SceneNode>
+        [DebuggerDisplay("Name={"+ nameof(Name) +"}; Child Count={" + nameof(ItemsCount) + "};")]
+        public abstract partial class SceneNode : DisposeObject, IComparable<SceneNode>, Animations.IAnimationNode
         {
             #region Properties
 
@@ -48,8 +50,14 @@ namespace HelixToolkit.UWP
             /// Do not assgin this field. This is updated by <see cref="ComputeTransformMatrix"/>.
             /// Used as field only for performance consideration.
             /// </summary>
-            public Matrix TotalModelMatrix = Matrix.Identity;
-
+            internal Matrix TotalModelMatrixInternal = Matrix.Identity;
+            /// <summary>
+            /// Gets the total model matrix.
+            /// </summary>
+            /// <value>
+            /// The total model matrix.
+            /// </value>
+            public Matrix TotalModelMatrix { get => TotalModelMatrixInternal; }
             /// <summary>
             /// Gets or sets the order key.
             /// </summary>
@@ -102,16 +110,21 @@ namespace HelixToolkit.UWP
             {
                 set
                 {
-                    if (Set(ref modelMatrix, value))
+                    if (SetAffectsRender(ref modelMatrix, value))
                     {
                         NeedMatrixUpdate = true;
-                        InvalidateRender();
                     }
                 }
                 get { return modelMatrix; }
             }
 
             private SceneNode parent = NullSceneNode.NullNode;
+            /// <summary>
+            /// Gets or sets the parent.
+            /// </summary>
+            /// <value>
+            /// The parent.
+            /// </value>
             public SceneNode Parent
             {
                 internal set
@@ -129,7 +142,6 @@ namespace HelixToolkit.UWP
             }
 
             private bool visible = true;
-
             /// <summary>
             /// Gets or sets a value indicating whether this <see cref="SceneNode"/> is visible.
             /// </summary>
@@ -138,12 +150,11 @@ namespace HelixToolkit.UWP
             /// </value>
             public bool Visible
             {
-                internal set
+                set
                 {
-                    if (Set(ref visible, value))
+                    if (SetAffectsRender(ref visible, value))
                     {
                         VisibleChanged?.Invoke(this, value ? BoolArgs.TrueArgs : BoolArgs.FalseArgs);
-                        InvalidateRender();
                     }
                 }
                 get { return visible; }
@@ -176,15 +187,10 @@ namespace HelixToolkit.UWP
                 private set; get;
             }
 
-            private IRenderHost renderHost;
-
             /// <summary>
             ///
             /// </summary>
-            public IRenderHost RenderHost
-            {
-                get { return renderHost; }
-            }
+            public IRenderHost RenderHost { get; private set; }
 
             /// <summary>
             /// Gets the effects manager.
@@ -192,7 +198,7 @@ namespace HelixToolkit.UWP
             /// <value>
             /// The effects manager.
             /// </value>
-            protected IEffectsManager EffectsManager { get { return renderHost.EffectsManager; } }
+            protected IEffectsManager EffectsManager { get { return RenderHost.EffectsManager; } }
 
             /// <summary>
             /// Gets the items.
@@ -212,6 +218,13 @@ namespace HelixToolkit.UWP
             /// The children.
             /// </value>
             public ReadOnlyObservableCollection<SceneNode> Items { internal set; get; } = Constants.EmptyReadOnlyRenderableArray;
+            /// <summary>
+            /// Gets the items count.
+            /// </summary>
+            /// <value>
+            /// The items count.
+            /// </value>
+            public int ItemsCount { get => Items.Count; }
 
             /// <summary>
             /// Gets or sets a value indicating whether this instance is hit test visible.
@@ -251,6 +264,34 @@ namespace HelixToolkit.UWP
             /// The effects technique.
             /// </value>
             public IRenderTechnique EffectTechnique { get { return renderTechnique; } }
+
+            /// <summary>
+            /// Gets or sets a value indicating whether this node is animation node.
+            /// </summary>
+            /// <value>
+            ///   <c>true</c> if this instance is animation node; otherwise, <c>false</c>.
+            /// </value>
+            public bool IsAnimationNode { set; get; } = false;
+            /// <summary>
+            /// Gets a value indicating whether this node is animation node root.
+            /// </summary>
+            /// <value>
+            ///   <c>true</c> if this node is animation node root; otherwise, <c>false</c>.
+            /// </value>
+            public bool IsAnimationNodeRoot
+            {
+                get
+                {
+                    if (IsAnimationNode)
+                    {
+                        if (Parent is Animations.IAnimationNode n)
+                        {
+                            return !n.IsAnimationNode;
+                        }
+                    }
+                    return false;
+                }
+            }
             #region Handling Transforms
 
             /// <summary>
@@ -329,16 +370,45 @@ namespace HelixToolkit.UWP
             /// </value>
             public object WrapperSource { internal set; get; }
 
+            private object tag = null;
+            /// <summary>
+            /// Gets or sets the tag. This can be used to attach an external view model or property class object
+            /// </summary>
+            /// <value>
+            /// The tag.
+            /// </value>
+            public object Tag
+            {
+                set => Set(ref tag, value);
+                get => tag;
+            }
             #endregion Properties
 
-            #region Events
-
+            #region Events            
+            /// <summary>
+            /// Occurs when [visible changed].
+            /// </summary>
             public event EventHandler<BoolArgs> VisibleChanged;
-
+            /// <summary>
+            /// Occurs when [attached].
+            /// </summary>
             public event EventHandler Attached;
-
+            /// <summary>
+            /// Occurs when [detached].
+            /// </summary>
             public event EventHandler Detached;
-
+            /// <summary>
+            /// Occurs when [mouse down].
+            /// </summary>
+            public event EventHandler<SceneNodeMouseDownArgs> MouseDown;
+            /// <summary>
+            /// Occurs when [mouse move].
+            /// </summary>
+            public event EventHandler<SceneNodeMouseMoveArgs> MouseMove;
+            /// <summary>
+            /// Occurs when [mouse up].
+            /// </summary>
+            public event EventHandler<SceneNodeMouseUpArgs> MouseUp;
             #endregion Events
 
             private RenderCore core;
@@ -348,7 +418,7 @@ namespace HelixToolkit.UWP
             public SceneNode()
             {
                 WrapperSource = this;
-                renderCore = new Lazy<RenderCore>(() => 
+                renderCore = new Lazy<RenderCore>(() =>
                 {
                     core = OnCreateRenderCore();
                     core.InvalidateRender += RenderCore_OnInvalidateRenderer;
@@ -375,7 +445,7 @@ namespace HelixToolkit.UWP
                 {
                     return;
                 }
-                renderHost = host;
+                RenderHost = host;
                 this.renderTechnique = OnSetRenderTechnique != null ? OnSetRenderTechnique(host) : OnCreateRenderTechnique(host);
                 if (renderTechnique == null)
                 {
@@ -435,12 +505,12 @@ namespace HelixToolkit.UWP
             /// </summary>
             protected virtual void OnDetach()
             {
-                renderHost = null;           
+                RenderHost = null;           
             }
 
             protected void InvalidateRenderEvent(object sender, EventArgs arg)
             {
-                renderHost?.InvalidateRender();
+                RenderHost?.InvalidateRender();
             }
 
             /// <summary>
@@ -449,7 +519,7 @@ namespace HelixToolkit.UWP
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void InvalidateRender()
             {
-                renderHost?.InvalidateRender();
+                RenderHost?.InvalidateRender();
             }
 
             /// <summary>
@@ -458,7 +528,7 @@ namespace HelixToolkit.UWP
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             protected void InvalidateSceneGraph()
             {
-                renderHost?.InvalidateSceneGraph();
+                RenderHost?.InvalidateSceneGraph();
             }
 
             /// <summary>
@@ -467,7 +537,7 @@ namespace HelixToolkit.UWP
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             protected void InvalidatePerFrameRenderables()
             {
-                renderHost?.InvalidatePerFrameRenderables();
+                RenderHost?.InvalidatePerFrameRenderables();
             }
             /// <summary>
             /// Updates the element total transforms, determine renderability, etc. by the specified time span.
@@ -475,7 +545,7 @@ namespace HelixToolkit.UWP
             /// <param name="context">The time since last update.</param>
             public virtual void Update(RenderContext context)
             {
-                IsRenderable = CanRender(context);
+                IsRenderable = CanRender(context) && core.CanRenderFlag;
                 if (!IsRenderable)
                 {
                     return;
@@ -488,14 +558,14 @@ namespace HelixToolkit.UWP
             {
                 if (NeedMatrixUpdate)
                 {
-                    core.ModelMatrix = TotalModelMatrix = modelMatrix * parent.TotalModelMatrix;
+                    core.ModelMatrix = TotalModelMatrixInternal = modelMatrix * parent.TotalModelMatrixInternal;
                     for (int i = 0; i < ItemsInternal.Count; ++i)
                     {
                         ItemsInternal[i].NeedMatrixUpdate = true;
                     }
                     NeedMatrixUpdate = false;
-                    TransformChanged(ref TotalModelMatrix);
-                    OnTransformChanged?.Invoke(this, new TransformArgs(ref TotalModelMatrix));               
+                    TransformChanged(ref TotalModelMatrixInternal);
+                    OnTransformChanged?.Invoke(this, new TransformArgs(ref TotalModelMatrixInternal));               
                 }
             }
             /// <summary>
@@ -536,10 +606,7 @@ namespace HelixToolkit.UWP
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Render(RenderContext context, DeviceContextProxy deviceContext)
             {
-                if (core.CanRenderFlag)
-                {
-                    core.Render(context, deviceContext);
-                }
+                core.Render(context, deviceContext);
             }
 
             /// <summary>
@@ -550,10 +617,7 @@ namespace HelixToolkit.UWP
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void RenderShadow(RenderContext context, DeviceContextProxy deviceContext)
             {
-                if (core.CanRenderFlag)
-                {
-                    core.RenderShadow(context, deviceContext);
-                }
+                core.RenderShadow(context, deviceContext);
             }
             /// <summary>
             /// Renders the custom.
@@ -563,10 +627,7 @@ namespace HelixToolkit.UWP
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void RenderCustom(RenderContext context, DeviceContextProxy deviceContext)
             {
-                if (core.CanRenderFlag)
-                {
-                    core.RenderCustom(context, deviceContext);
-                }
+                 core.RenderCustom(context, deviceContext);
             }
             /// <summary>
             /// Renders the custom.
@@ -577,10 +638,7 @@ namespace HelixToolkit.UWP
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void RenderDepth(RenderContext context, DeviceContextProxy deviceContext, Shaders.ShaderPass pass)
             {
-                if (core.CanRenderFlag)
-                {
-                    core.RenderDepth(context, deviceContext, pass);
-                }
+                 core.RenderDepth(context, deviceContext, pass);
             }
             /// <summary>
             /// View frustum test.
@@ -606,7 +664,7 @@ namespace HelixToolkit.UWP
             {
                 if (CanHitTest(context))
                 {
-                    return OnHitTest(context, TotalModelMatrix, ref ray, ref hits);
+                    return OnHitTest(context, TotalModelMatrixInternal, ref ray, ref hits);
                 }
                 else
                 {
@@ -874,15 +932,36 @@ namespace HelixToolkit.UWP
                 base.OnDispose(disposeManagedResources);
             }
 
+            public int CompareTo(SceneNode other)
+            {
+                if(other == null) { return 1; }
+                return RenderOrderKey.CompareTo(other.RenderOrderKey);
+            }
+
+            public void RaiseMouseDownEvent(IViewport3DX viewport, Vector2 pos, HitTestResult hit)
+            {
+                MouseDown?.Invoke(this, new SceneNodeMouseDownArgs(viewport, pos, this, hit));
+            }
+
+            public void RaiseMouseMoveEvent(IViewport3DX viewport, Vector2 pos, HitTestResult hit)
+            {
+                MouseMove?.Invoke(this, new SceneNodeMouseMoveArgs(viewport, pos, this, hit));
+            }
+
+            public void RaiseMouseUpEvent(IViewport3DX viewport, Vector2 pos, HitTestResult hit)
+            {
+                MouseUp?.Invoke(this, new SceneNodeMouseUpArgs(viewport, pos, this, hit));
+            }
+
+
             /// <summary>
             /// 
             /// </summary>
             /// <typeparam name="T"></typeparam>
             /// <param name="backingField"></param>
             /// <param name="value"></param>
-            /// <param name="propertyName"></param>
             /// <returns></returns>
-            protected bool SetAffectsRender<T>(ref T backingField, T value, [CallerMemberName] string propertyName = "")
+            protected bool SetAffectsRender<T>(ref T backingField, T value)
             {
                 if (EqualityComparer<T>.Default.Equals(backingField, value))
                 {
@@ -890,7 +969,6 @@ namespace HelixToolkit.UWP
                 }
 
                 backingField = value;
-                this.RaisePropertyChanged(propertyName);
                 InvalidateRender();
                 return true;
             }
@@ -901,9 +979,8 @@ namespace HelixToolkit.UWP
             /// <typeparam name="T"></typeparam>
             /// <param name="backingField">The backing field.</param>
             /// <param name="value">The value.</param>
-            /// <param name="propertyName">Name of the property.</param>
             /// <returns></returns>
-            protected bool SetAffectsSceneGraph<T>(ref T backingField, T value, [CallerMemberName] string propertyName = "")
+            protected bool SetAffectsSceneGraph<T>(ref T backingField, T value)
             {
                 if (EqualityComparer<T>.Default.Equals(backingField, value))
                 {
@@ -911,15 +988,8 @@ namespace HelixToolkit.UWP
                 }
 
                 backingField = value;
-                this.RaisePropertyChanged(propertyName);
                 InvalidateSceneGraph();
                 return true;
-            }
-
-            public int CompareTo(SceneNode other)
-            {
-                if(other == null) { return 1; }
-                return RenderOrderKey.CompareTo(other.RenderOrderKey);
             }
         }
 
@@ -932,6 +1002,52 @@ namespace HelixToolkit.UWP
                 return false;
             }
         }
-    }
 
+        #region Mouse Events Args
+        public class SceneNodeMouseDownArgs : EventArgs
+        {
+            public HitTestResult HitResult { get; }
+            public SceneNode Source { get; }
+            public IViewport3DX Viewport { get; }
+            public Vector2 Position { get; }
+            public SceneNodeMouseDownArgs(IViewport3DX viewport, Vector2 pos, SceneNode node, HitTestResult hit)
+            {
+                Viewport = viewport;
+                Position = pos;
+                Source = node;
+                HitResult = hit;
+            }
+        }
+
+        public class SceneNodeMouseMoveArgs : EventArgs
+        {
+            public HitTestResult HitResult { get; }
+            public SceneNode Source { get; }
+            public IViewport3DX Viewport { get; }
+            public Vector2 Position { get; }
+            public SceneNodeMouseMoveArgs(IViewport3DX viewport, Vector2 pos, SceneNode node, HitTestResult hit)
+            {
+                Viewport = viewport;
+                Position = pos;
+                Source = node;
+                HitResult = hit;
+            }
+        }
+
+        public class SceneNodeMouseUpArgs : EventArgs
+        {
+            public HitTestResult HitResult { get; }
+            public SceneNode Source { get; }
+            public IViewport3DX Viewport { get; }
+            public Vector2 Position { get; }
+            public SceneNodeMouseUpArgs(IViewport3DX viewport, Vector2 pos, SceneNode node, HitTestResult hit)
+            {
+                Viewport = viewport;
+                Position = pos;
+                Source = node;
+                HitResult = hit;
+            }
+        }
+        #endregion
+    }
 }
