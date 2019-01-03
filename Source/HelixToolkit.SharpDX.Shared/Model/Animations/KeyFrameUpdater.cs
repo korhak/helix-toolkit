@@ -259,6 +259,20 @@ namespace HelixToolkit.UWP
                 UpdateNodes(timeElpased);
                 currentTime = timeStamp;
             }
+            /// <summary>
+            /// Update animation to a specific time, mainly for stepping through animation.
+            /// </summary>
+            /// <param name="time">Elapsed time</param>
+            public void Update(float time)
+            {
+                if (time > Animation.EndTime)
+                {
+                    time = Animation.EndTime;
+                }
+                accumulatedTime = time;
+                UpdateBoneSkinMesh();
+                UpdateNodes(0);
+            }
 
             private void UpdateBoneSkinMesh()
             {
