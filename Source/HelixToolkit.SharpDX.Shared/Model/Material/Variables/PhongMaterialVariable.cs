@@ -2,6 +2,7 @@
 The MIT License (MIT)
 Copyright (c) 2018 Helix Toolkit contributors
 */
+using SharpDX;
 using System.Runtime.CompilerServices;
 #if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
@@ -183,9 +184,8 @@ namespace HelixToolkit.UWP
             /// <param name="technique"></param>
             /// <param name="material">The material.</param>
             public PhongMaterialVariables(string passName, IEffectsManager manager, IRenderTechnique technique, PhongMaterialCore material)
-                : this(manager, technique, material)
+                : this(manager, technique, material, passName)
             {
-                MaterialPass = technique[passName];
             }
 
             protected override void OnInitialPropertyBindings()
@@ -201,8 +201,9 @@ namespace HelixToolkit.UWP
                 AddPropertyBinding(nameof(PhongMaterialCore.RenderEnvironmentMap), () => { WriteValue(PhongPBRMaterialStruct.HasCubeMapStr, material.RenderEnvironmentMap ? 1 : 0); });
                 AddPropertyBinding(nameof(PhongMaterialCore.UVTransform), () => 
                 {
-                    WriteValue(PhongPBRMaterialStruct.UVTransformR1Str, material.UVTransform.Column1);
-                    WriteValue(PhongPBRMaterialStruct.UVTransformR2Str, material.UVTransform.Column2);
+                    Matrix m = material.UVTransform;
+                    WriteValue(PhongPBRMaterialStruct.UVTransformR1Str, m.Column1);
+                    WriteValue(PhongPBRMaterialStruct.UVTransformR2Str, m.Column2);
                 });
                 AddPropertyBinding(nameof(PhongMaterialCore.EnableAutoTangent), () => { WriteValue(PhongPBRMaterialStruct.EnableAutoTangent, material.EnableAutoTangent); });
                 AddPropertyBinding(nameof(PhongMaterialCore.MaxTessellationDistance), () => { WriteValue(PhongPBRMaterialStruct.MaxTessDistanceStr, material.MaxTessellationDistance); });
@@ -215,6 +216,7 @@ namespace HelixToolkit.UWP
                 AddPropertyBinding(nameof(PhongMaterialCore.RenderSpecularColorMap), () => { WriteValue(PhongPBRMaterialStruct.HasSpecularColorMap, material.RenderSpecularColorMap && textureResources[SpecularColorIdx] != null ? 1 : 0); });
                 AddPropertyBinding(nameof(PhongMaterialCore.RenderDisplacementMap), () => { WriteValue(PhongPBRMaterialStruct.HasDisplacementMapStr, material.RenderDisplacementMap && textureResources[DisplaceIdx] != null ? 1 : 0); });
                 AddPropertyBinding(nameof(PhongMaterialCore.RenderEmissiveMap), () => { WriteValue(PhongPBRMaterialStruct.HasEmissiveMapStr, material.RenderEmissiveMap && textureResources[EmissiveIdx] != null ? 1 : 0); });
+                AddPropertyBinding(nameof(PhongMaterialCore.EnableFlatShading), () => { WriteValue(PhongPBRMaterialStruct.RenderFlat, material.EnableFlatShading); });
                 AddPropertyBinding(nameof(PhongMaterialCore.DiffuseMap), () => 
                 {
                     CreateTextureView(material.DiffuseMap, DiffuseIdx);
@@ -263,10 +265,10 @@ namespace HelixToolkit.UWP
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void CreateTextureView(System.IO.Stream stream, int index)
+            private void CreateTextureView(TextureModel textureModel, int index)
             {
                 RemoveAndDispose(ref textureResources[index]);
-                textureResources[index] = stream == null ? null : Collect(textureManager.Register(stream));
+                textureResources[index] = textureModel == null ? null : Collect(textureManager.Register(textureModel));
                 if (textureResources[index] != null)
                 {
                     textureIndex |= 1u << index;

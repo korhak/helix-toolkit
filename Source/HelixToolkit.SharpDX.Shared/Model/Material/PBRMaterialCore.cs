@@ -140,11 +140,18 @@ namespace HelixToolkit.UWP
                 get => renderNormalMap;
             }
 
-            private bool renderRMAMap = true;
-            public bool RenderRMAMap
+            private bool renderRoughnessMetallicMap = true;
+            public bool RenderRoughnessMetallicMap
             {
-                set => Set(ref renderRMAMap, value);
-                get => renderRMAMap;
+                set => Set(ref renderRoughnessMetallicMap, value);
+                get => renderRoughnessMetallicMap;
+            }
+
+            private bool renderAmbientOcclusionMap = true;
+            public bool RenderAmbientOcclusionMap
+            {
+                set => Set(ref renderAmbientOcclusionMap, value);
+                get => renderAmbientOcclusionMap;
             }
 
             private bool renderDisplacementMap = true;
@@ -216,85 +223,150 @@ namespace HelixToolkit.UWP
                 get => enableAutoTangent;
             }
 
-            private Stream albedoMap;
+            private TextureModel albedoMap;
             /// <summary>
             /// Gets or sets the albedo map.
             /// </summary>
             /// <value>
             /// The albedo map.
             /// </value>
-            public Stream AlbedoMap
+            public TextureModel AlbedoMap
             {
                 set => Set(ref albedoMap, value);
                 get => albedoMap;
             }
+            /// <summary>
+            /// Gets or sets the albedo map file path. Used for export only
+            /// </summary>
+            /// <value>
+            /// The albedo map file path.
+            /// </value>
+            public string AlbedoMapFilePath { set; get; }
 
-            private Stream emissiveMap;
+            private TextureModel emissiveMap;
             /// <summary>
             /// Gets or sets the emissive map.
             /// </summary>
             /// <value>
             /// The emissive map.
             /// </value>
-            public Stream EmissiveMap
+            public TextureModel EmissiveMap
             {
                 set => Set(ref emissiveMap, value);
                 get => emissiveMap; 
             }
+            /// <summary>
+            /// Gets or sets the emissive map file path. Only for export
+            /// </summary>
+            /// <value>
+            /// The emissive map.
+            /// </value>
+            public string EmissiveMapFilePath { set; get; }
 
-
-            private Stream normalMap;
+            private TextureModel normalMap;
             /// <summary>
             /// Gets or sets the NormalMap.
             /// </summary>
             /// <value>
             /// NormalMap
             /// </value>
-            public Stream NormalMap
+            public TextureModel NormalMap
             {
                 set => Set(ref normalMap, value); 
                 get => normalMap; 
             }
+            /// <summary>
+            /// Gets or sets the normal map file path. Only for export
+            /// </summary>
+            /// <value>
+            /// The normal map file path.
+            /// </value>
+            public string NormalMapFilePath { set; get; }
 
 
-            private Stream displacementMap;
+            private TextureModel displacementMap;
             /// <summary>
             /// Gets or sets the DisplacementMap.
             /// </summary>
             /// <value>
             /// DisplacementMap
             /// </value>
-            public Stream DisplacementMap
+            public TextureModel DisplacementMap
             {
                 set => Set(ref displacementMap, value); 
                 get => displacementMap; 
             }
+            /// <summary>
+            /// Gets or sets the displacement map file path. Only for export
+            /// </summary>
+            /// <value>
+            /// The displacement map file path.
+            /// </value>
+            public string DisplacementMapFilePath { set; get; }
 
-            private Stream irradianceMap;
+            private TextureModel irradianceMap;
             /// <summary>
             /// Gets or sets the irradiance map.
             /// </summary>
             /// <value>
             /// The irradiance map.
             /// </value>
-            public Stream IrradianceMap
+            public TextureModel IrradianceMap
             {
                 set => Set(ref irradianceMap, value);
                 get => irradianceMap; 
             }
-
-            private Stream rmaMap;
             /// <summary>
-            /// Gets or sets the Roughness, Metallic, Ambient Occlusion map. glTF2 defines occlusion as R channel, roughness as G channel, metalness as B channel
+            /// Gets or sets the irradiance map file path. Only for export
+            /// </summary>
+            /// <value>
+            /// The irradiance map file path.
+            /// </value>
+            public string IrradianceMapFilePath { set; get; }
+
+            private TextureModel roughnessMetallicMap;
+            /// <summary>
+            /// Gets or sets the Roughness, Metallic map.
+            /// glTF2 defines occlusion as R channel, roughness as G channel, metalness as B channel.
+            /// If provides RMA map in one texture, set both <see cref="RoughnessMetallicMap"/> and <see cref="AmbientOcculsionMap"/> to the same texture.
             /// </summary>
             /// <value>
             /// The rma map.
             /// </value>
-            public Stream RMAMap
+            public TextureModel RoughnessMetallicMap
             {
-                set => Set(ref rmaMap, value); 
-                get => rmaMap; 
+                set => Set(ref roughnessMetallicMap, value); 
+                get => roughnessMetallicMap; 
             }
+            /// <summary>
+            /// Gets or sets the rma map file path. Only for export
+            /// </summary>
+            /// <value>
+            /// The rma map file path.
+            /// </value>
+            public string RoughnessMetallicMapFilePath { set; get; }
+
+            private TextureModel ambientOcculsionMap;
+            /// <summary>
+            /// Gets or sets the separate Ambient Occlusion map. 
+            /// glTF2 defines occlusion as R channel, roughness as G channel, metalness as B channel.
+            /// If provides RMA map in one texture, set both <see cref="RoughnessMetallicMap"/> and <see cref="AmbientOcculsionMap"/> to the same texture.
+            /// </summary>
+            /// <value>
+            /// The ao map.
+            /// </value>
+            public TextureModel AmbientOcculsionMap
+            {
+                set => Set(ref ambientOcculsionMap, value);
+                get => ambientOcculsionMap;
+            }
+            /// <summary>
+            /// Gets or sets the ao map file path.
+            /// </summary>
+            /// <value>
+            /// The ao map file path.
+            /// </value>
+            public string AmbientOcculsionMapFilePath { set; get; }
 
             private Vector4 displacementMapScaleMask;
             /// <summary>
@@ -309,14 +381,14 @@ namespace HelixToolkit.UWP
                 get => displacementMapScaleMask; 
             }
 
-            private Matrix uvTransform = Matrix.Identity;
+            private UVTransform uvTransform = UVTransform.Identity;
             /// <summary>
             /// Gets or sets the uv transform.
             /// </summary>
             /// <value>
             /// The uv transform.
             /// </value>
-            public Matrix UVTransform
+            public UVTransform UVTransform
             {
                 set => Set(ref uvTransform, value); 
                 get => uvTransform; 
@@ -415,7 +487,18 @@ namespace HelixToolkit.UWP
                 get => enableTessellation;
             }
 
-
+            private bool enableFlatShading = false;
+            /// <summary>
+            /// Gets or sets a value indicating whether [enable flat shading].
+            /// </summary>
+            /// <value>
+            ///   <c>true</c> if [enable flat shading]; otherwise, <c>false</c>.
+            /// </value>
+            public bool EnableFlatShading
+            {
+                set { Set(ref enableFlatShading, value); }
+                get { return enableFlatShading; }
+            }
 
             public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique)
             {

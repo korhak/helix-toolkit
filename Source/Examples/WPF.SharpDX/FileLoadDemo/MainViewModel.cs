@@ -12,11 +12,13 @@ namespace FileLoadDemo
     using HelixToolkit.Wpf.SharpDX.Animations;
     using HelixToolkit.Wpf.SharpDX.Assimp;
     using HelixToolkit.Wpf.SharpDX.Controls;
+    using HelixToolkit.Wpf.SharpDX.Model;
     using HelixToolkit.Wpf.SharpDX.Model.Scene;
     using Microsoft.Win32;
     using System.Collections.Generic;
     using System.Collections.ObjectModel;
     using System.Diagnostics;
+    using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
     using System.Windows;
@@ -24,8 +26,8 @@ namespace FileLoadDemo
 
     public class MainViewModel : BaseViewModel
     {
-        private string OpenFileFilter = $"3D model files ({HelixToolkit.Wpf.SharpDX.Assimp.Importer.SupportedFormatsString + " | " + HelixToolkit.Wpf.SharpDX.Assimp.Importer.SupportedFormatsString})";
-
+        private string OpenFileFilter = $"{HelixToolkit.Wpf.SharpDX.Assimp.Importer.SupportedFormatsString}";
+        private string ExportFileFilter = $"{HelixToolkit.Wpf.SharpDX.Assimp.Exporter.SupportedFormatsString}";
         private bool showWireframe = false;
         public bool ShowWireframe
         {
@@ -40,6 +42,41 @@ namespace FileLoadDemo
             {
                 return showWireframe;
             }
+        }
+
+        private bool renderFlat = false;
+        public bool RenderFlat
+        {
+            set
+            {
+                if(SetValue(ref renderFlat, value))
+                {
+                    RenderFlatFunct(value);
+                }
+            }
+            get
+            {
+                return renderFlat;
+            }
+        }
+
+        private bool renderEnvironmentMap = true;
+        public bool RenderEnvironmentMap
+        {
+            set
+            {
+                if(SetValue(ref renderEnvironmentMap, value) && scene!=null && scene.Root != null)
+                {
+                    foreach(var node in scene.Root.Traverse())
+                    {
+                        if(node is MaterialGeometryNode m && m.Material is PBRMaterialCore material)
+                        {
+                            material.RenderEnvironmentMap = value;
+                        }
+                    }
+                }
+            }
+            get => renderEnvironmentMap;
         }
 
         public ICommand OpenFileCommand
@@ -113,6 +150,8 @@ namespace FileLoadDemo
             }
         }
 
+        public TextureModel EnvironmentMap { get; }
+
         private SynchronizationContext context = SynchronizationContext.Current;
         private HelixToolkitScene scene;
         private NodeAnimationUpdater animationUpdater;
@@ -131,13 +170,16 @@ namespace FileLoadDemo
                 Position = new System.Windows.Media.Media3D.Point3D(0, 10, 10),
                 UpDirection = new System.Windows.Media.Media3D.Vector3D(0, 1, 0),
                 FarPlaneDistance = 5000,
-                NearPlaneDistance = 1
+                NearPlaneDistance = 0.1f
             };
             ResetCameraCommand = new DelegateCommand(() =>
             {
                 (Camera as OrthographicCamera).Reset();
+                (Camera as OrthographicCamera).FarPlaneDistance = 5000;
+                (Camera as OrthographicCamera).NearPlaneDistance = 0.1f;
             });
             ExportCommand = new DelegateCommand(() => { ExportFile(); });
+            EnvironmentMap = LoadFileToMemory("Cubemap_Grandcanyon.dds");
         }
 
         private void OpenFile()
@@ -168,6 +210,23 @@ namespace FileLoadDemo
                     GroupModel.Clear();
                     if (scene != null)
                     {
+                        if (scene.Root != null)
+                        {
+                            foreach (var node in scene.Root.Traverse())
+                            {
+                                if (node is MaterialGeometryNode m)
+                                {
+                                    if (m.Material is PBRMaterialCore pbr)
+                                    {
+                                        pbr.RenderEnvironmentMap = RenderEnvironmentMap;
+                                    }
+                                    else if(m.Material is PhongMaterialCore phong)
+                                    {
+                                        phong.RenderEnvironmentMap = RenderEnvironmentMap;
+                                    }
+                                }
+                            }
+                        }
                         GroupModel.AddNode(scene.Root);
                         if(scene.HasAnimation)
                         {
@@ -175,6 +234,10 @@ namespace FileLoadDemo
                             {
                                 Animations.Add(ani);
                             }
+                        }
+                        foreach(var n in scene.Root.Traverse())
+                        {
+                            n.Tag = new AttachedNodeViewModel(n);
                         }
                     }                  
                 }
@@ -205,9 +268,12 @@ namespace FileLoadDemo
 
         private void ExportFile()
         {
-            string path = SaveFileDialog("3D model files (*.obj;|*.obj;");
-            if (string.IsNullOrEmpty(path))
+            var index = SaveFileDialog(ExportFileFilter, out var path);
+            if (!string.IsNullOrEmpty(path) && index >= 0)
             {
+                var id = HelixToolkit.Wpf.SharpDX.Assimp.Exporter.SupportedFormats[index].FormatId;
+                var exporter = new HelixToolkit.Wpf.SharpDX.Assimp.Exporter();
+                exporter.ExportToFile(path, scene, id);
                 return;
             }
         }
@@ -228,15 +294,19 @@ namespace FileLoadDemo
             return d.FileName;
         }
 
-        private string SaveFileDialog(string filter)
+        private int SaveFileDialog(string filter, out string path)
         {
             var d = new SaveFileDialog();
             d.Filter = filter;
             if (d.ShowDialog() == true)
             {
-                return d.FileName;
+                path = d.FileName;
+                return d.FilterIndex - 1;//This is tarting from 1. So must minus 1
             }
-            else { return ""; }
+            else {
+                path = "";
+                return -1;
+            }
         }
 
         private void ShowWireframeFunct(bool show)
@@ -249,6 +319,27 @@ namespace FileLoadDemo
                 if (node is MeshNode m)
                 {
                     m.RenderWireframe = show;
+                }
+            }
+        }
+
+        private void RenderFlatFunct(bool show)
+        {
+            foreach (var node in GroupModel.GroupNode.Items.PreorderDFT((node) =>
+            {
+                return node.IsRenderable;
+            }))
+            {
+                if (node is MeshNode m)
+                {
+                    if (m.Material is PhongMaterialCore phong)
+                    {
+                        phong.EnableFlatShading = show;
+                    }
+                    else if (m.Material is PBRMaterialCore pbr)
+                    {
+                        pbr.EnableFlatShading = show;
+                    }
                 }
             }
         }
