@@ -39,8 +39,9 @@
                 <MouseBinding Command="hx:ViewportCommands.Zoom" Gesture="MiddleClick" />
                 <MouseBinding Command="hx:ViewportCommands.Pan" Gesture="LeftClick" />
             </hx:Viewport3DX.InputBindings>
-            <hx:AmbientLight3D Color="#5E5E5E" />
+            <hx:AmbientLight3D Color="#363636" />
             <hx:DirectionalLight3D Direction="{Binding Camera.LookDirection}" Color="#D6D6D6" />
+            <hx:EnvironmentMap3D IsRendering="{Binding RenderEnvironmentMap}" Texture="{Binding EnvironmentMap}" />
             <hx:Element3DPresenter Content="{Binding GroupModel}" />
             <hx:PostEffectMeshBorderHighlight EffectName="highlight" />
         </hx:Viewport3DX>
@@ -73,7 +74,7 @@
         <Grid
             Grid.Row="1"
             Grid.Column="1"
-            Width="200"
+            Width="250"
             VerticalAlignment="Stretch">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -89,6 +90,8 @@
                 <Separator />
                 <CheckBox Margin="4" IsChecked="{Binding ShowWireframe}">Show Wireframe</CheckBox>
                 <CheckBox Margin="4" IsChecked="{Binding ElementName=view, Path=EnableSSAO}">Enable SSAO</CheckBox>
+                <CheckBox Margin="4" IsChecked="{Binding RenderEnvironmentMap}">Render EnvironmentMap</CheckBox>
+                <CheckBox Margin="4" IsChecked="{Binding RenderFlat}">Flat Shading</CheckBox>
                 <Separator />
                 <CheckBox Margin="4" IsChecked="{Binding EnableAnimation}">Enable Animation</CheckBox>
                 <TextBlock>Animations</TextBlock>
@@ -99,26 +102,35 @@
                 <Separator />
                 <TextBlock>Scene Graph</TextBlock>
             </StackPanel>
-            <TreeView Grid.Row="1" ItemsSource="{Binding GroupModel.GroupNode.Items}">
-                <TreeView.ItemTemplate>
-                    <HierarchicalDataTemplate ItemsSource="{Binding Items}">
-                        <TextBlock Text="{Binding Name}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Style.Setters>
-                                        <Setter Property="Foreground" Value="Black" />
-                                    </Style.Setters>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsAnimationNode}" Value="true">
-                                            <Setter Property="Foreground" Value="Blue" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </HierarchicalDataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
+            <ScrollViewer Grid.Row="1">
+                <TreeView ItemsSource="{Binding GroupModel.GroupNode.Items}">
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="TreeViewItem">
+                            <Setter Property="IsSelected" Value="{Binding Tag.Selected, Mode=TwoWay}" />
+                            <Setter Property="IsExpanded" Value="{Binding Tag.Expanded, Mode=TwoWay}" />
+                        </Style>
+                    </TreeView.ItemContainerStyle>
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate ItemsSource="{Binding Items}">
+                            <TextBlock Text="{Binding Name}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Setters>
+                                            <Setter Property="Foreground" Value="Black" />
+                                        </Style.Setters>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsAnimationNode}" Value="true">
+                                                <Setter Property="Foreground" Value="Blue" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </ScrollViewer>
+
         </Grid>
     </Grid>
 </Window>

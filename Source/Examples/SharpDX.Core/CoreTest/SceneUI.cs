@@ -8,6 +8,8 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Linq;
+using HelixToolkit.SharpDX.Core.Model;
+using HelixToolkit.SharpDX.Core;
 
 namespace CoreTest
 {
@@ -25,97 +27,107 @@ namespace CoreTest
         private static bool[] animationSelection;
         private static string[] animationNames;
         private static int currentSelectedAnimation = -1;
+        private static float[] fps = new float[128];
+        private static float[] frustumTest = new float[128];
+        private static int currFPSIndex = 0;
 
         public static void DrawUI(int width, int height, ref ViewportOptions options, GroupNode rootNode)
         {
-            ImGui.SetNextWindowPos(System.Numerics.Vector2.Zero, Condition.Always, System.Numerics.Vector2.Zero);
-            bool opened = false;
-            if (ImGui.BeginWindow("Model Loader Window", ref opened, 0.8f,
-                WindowFlags.MenuBar | WindowFlags.AlwaysAutoResize))
+            ImGui.SetNextWindowPos(System.Numerics.Vector2.Zero);
+            ImGui.SetNextWindowSize(new System.Numerics.Vector2(250, 350));
+            bool opened = true;
+            ImGui.Begin("Model Loader Window", ref opened, ImGuiWindowFlags.MenuBar | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse);
+            if (ImGui.BeginMenuBar())
             {
-                if (ImGui.BeginMenuBar())
+                if (ImGui.BeginMenu("Load Model", !loading))
                 {
-                    if (ImGui.BeginMenu("Load Model", !loading))
+                    if (ImGui.MenuItem("Open"))
                     {
-                        if (ImGui.MenuItem("Open"))
-                        {
-                            LoadModel(rootNode);
-                        }
-                        ImGui.EndMenu();
+                        LoadModel(rootNode, options.ShowEnvironmentMap);
                     }
-                    if (ImGui.BeginMenu("Options"))
-                    {
-                        ImGui.Checkbox("Dir Light Follow Camera", ref options.DirectionalLightFollowCamera);
-                        ImGui.SliderFloat("Dir Light Intensity", ref options.DirectionLightIntensity, 0, 1, "", 1);
-                        ImGui.SliderFloat("Ambient Light Intensity", ref options.AmbientLightIntensity, 0, 1, "", 1);
-                        ImGui.Separator();
-                        ImGui.Checkbox("Enable SSAO", ref options.EnableSSAO);
-                        ImGui.Checkbox("Enable FXAA", ref options.EnableFXAA);
-                        ImGui.Checkbox("Enable Frustum", ref options.EnableFrustum);
-                        if(ImGui.Checkbox("Show Wireframe", ref options.ShowWireframe))
-                        {
-                            options.ShowWireframeChanged = true;
-                        }
-                        ImGui.Separator();
-                        ImGui.ColorPicker3("Background Color", ref options.BackgroundColor);
-                        ImGui.EndMenu();
-                    }
-                    if (!showImGuiDemo && ImGui.BeginMenu("ImGui Demo"))
-                    {
-                        if (ImGui.MenuItem("Show"))
-                        {
-                            showImGuiDemo = true;
-                        }
-                        ImGui.EndMenu();
-                    }
-                    ImGui.EndMenuBar();
+                    ImGui.EndMenu();
                 }
-                if (ImGui.CollapsingHeader("Mouse Gestures", TreeNodeFlags.DefaultOpen))
+                if (ImGui.BeginMenu("Options"))
                 {
-                    ImGui.Text("Mouse Right: Rotate");
-                    ImGui.Text("Mouse Middle: Pan");
+                    ImGui.Checkbox("Dir Light Follow Camera", ref options.DirectionalLightFollowCamera);
+                    ImGui.SliderFloat("Dir Light Intensity", ref options.DirectionLightIntensity, 0, 1, "", 1);
+                    ImGui.SliderFloat("Ambient Light Intensity", ref options.AmbientLightIntensity, 0, 1, "", 1);
                     ImGui.Separator();
-                    if (!string.IsNullOrEmpty(SomeTextFromOutside))
+                    ImGui.Checkbox("Show EnvironmentMap", ref options.ShowEnvironmentMap);
+                    ImGui.Checkbox("Enable SSAO", ref options.EnableSSAO);
+                    ImGui.Checkbox("Enable FXAA", ref options.EnableFXAA);
+                    ImGui.Checkbox("Enable Frustum", ref options.EnableFrustum);
+                    if (ImGui.Checkbox("Show Wireframe", ref options.ShowWireframe))
                     {
-                        ImGui.Text(SomeTextFromOutside);
+                        options.ShowWireframeChanged = true;
                     }
-                }
-                ImGui.Separator();
-                if (!loading && ImGui.CollapsingHeader("Scene Graph", TreeNodeFlags.DefaultOpen))
-                {
-                    DrawSceneGraph(rootNode);
-                }
-
-                if (!loading && scene != null)
-                {
-                    DrawAnimations(scene.Animations, ref options);
-                }
-                
-                if (!loading && !string.IsNullOrEmpty(exception))
-                {
                     ImGui.Separator();
-                    ImGui.Text(exception, new System.Numerics.Vector4(1, 0, 0, 1));
+                    ImGui.ColorPicker3("Background Color", ref options.BackgroundColor);
+                    ImGui.EndMenu();
                 }
-
-                if (loading)
+                if (!showImGuiDemo && ImGui.BeginMenu("ImGui Demo"))
                 {
-                    ImGui.Text($"Loading: {modelName}");
-                    var progress = ((float)(Stopwatch.GetTimestamp() - currentTime) / Stopwatch.Frequency) * 100 % 100;
-                    ImGui.ProgressBar(progress/100, new System.Numerics.Vector2(width, 20), "");
+                    if (ImGui.MenuItem("Show"))
+                    {
+                        showImGuiDemo = true;
+                    }
+                    ImGui.EndMenu();
                 }
-                ImGui.EndWindow();
+                ImGui.EndMenuBar();
             }
+            if (ImGui.CollapsingHeader("Mouse Gestures", ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                ImGui.Text("Mouse Right: Rotate");
+                ImGui.Text("Mouse Middle: Pan");
+                ImGui.Separator();
+                if (!string.IsNullOrEmpty(SomeTextFromOutside))
+                {
+                    ImGui.Text(SomeTextFromOutside);
+                }
+            }
+            ImGui.Separator();
+            ImGui.Text("FPS");
+            ImGui.PlotLines("", ref fps[0], fps.Length, 0, $"{fps[currFPSIndex]}", 30, 70, new System.Numerics.Vector2(200, 50));
+            ImGui.Text("Frustum Test Time");
+            ImGui.PlotLines("", ref frustumTest[0], frustumTest.Length, 0, $"{frustumTest[currFPSIndex]}ms", 0, 5, new System.Numerics.Vector2(200, 50));
+            fps[currFPSIndex] = 1000f / (float)options.Viewport.RenderHost.RenderStatistics.LatencyStatistics.AverageValue;
+            frustumTest[currFPSIndex++] = (float)options.Viewport.RenderHost.RenderStatistics.FrustumTestTime * 1000;
+            currFPSIndex %= 128;
+
+            if (!loading && ImGui.CollapsingHeader("Scene Graph", ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                DrawSceneGraph(rootNode);
+            }
+
+            if (!loading && scene != null && scene.Animations != null)
+            {
+                DrawAnimations(scene.Animations, ref options);
+            }
+
+            if (!loading && !string.IsNullOrEmpty(exception))
+            {
+                ImGui.Separator();
+                ImGui.Text(exception);
+            }
+
+            if (loading)
+            {
+                ImGui.Text($"Loading: {modelName}");
+                var progress = ((float)(Stopwatch.GetTimestamp() - currentTime) / Stopwatch.Frequency) * 100 % 100;
+                ImGui.ProgressBar(progress / 100, new System.Numerics.Vector2(width, 20), "");
+            }
+            ImGui.End();
             if (showImGuiDemo)
             {
                 opened = false;
-                ImGuiNative.igShowDemoWindow(ref showImGuiDemo);
+                ImGui.ShowDemoWindow(ref showImGuiDemo);
             }
         }
 
-        private static void LoadModel(GroupNode node)
+        private static void LoadModel(GroupNode node, bool renderEnvironmentMap)
         {
             OpenFileDialog dialog = new OpenFileDialog();
-            dialog.Filter = $"3D model files ({HelixToolkit.SharpDX.Core.Assimp.Importer.SupportedFormatsString}|{HelixToolkit.SharpDX.Core.Assimp.Importer.SupportedFormatsString}";
+            dialog.Filter = HelixToolkit.SharpDX.Core.Assimp.Importer.SupportedFormatsString;
             if (dialog.ShowDialog() == DialogResult.OK)
             {
                 var path = dialog.FileName;             
@@ -133,6 +145,20 @@ namespace CoreTest
                     if (x.IsCompleted && x.Result != null)
                     {
                         node.Clear();
+                        foreach (var model in x.Result.Root.Traverse())
+                        {
+                            if (model is MeshNode mesh)
+                            {
+                                if (mesh.Material is PBRMaterialCore pbr)
+                                {
+                                    pbr.RenderEnvironmentMap = renderEnvironmentMap;
+                                }
+                                else if (mesh.Material is PhongMaterialCore phong)
+                                {
+                                    phong.RenderEnvironmentMap = renderEnvironmentMap;
+                                }
+                            }
+                        }
                         node.AddChildNode(x.Result.Root);
                         scene = x.Result;
                         if(scene.Animations != null && scene.Animations.Count > 0)
@@ -160,7 +186,7 @@ namespace CoreTest
             {
                 if (node.IsAnimationNode)
                 {
-                    ImGui.PushStyleColor(ColorTarget.Text, new System.Numerics.Vector4(0, 1, 1, 1));
+                    ImGui.PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0, 1, 1, 1));
                 }
                 if (ImGui.TreeNode(node.Name))
                 {
@@ -190,7 +216,7 @@ namespace CoreTest
             if (animations.Count > 0)
             {
                 ImGui.Text($"Animations: {animations.Count}");
-                if(ImGui.Combo(" ", ref currentSelectedAnimation, animationNames))
+                if(ImGui.Combo(" ", ref currentSelectedAnimation, animationNames, animations.Count))
                 {
                     if(currentSelectedAnimation>=0 && currentSelectedAnimation < animationNames.Length)
                     {

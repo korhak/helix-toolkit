@@ -13,6 +13,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Runtime.CompilerServices;
+using System.Collections.ObjectModel;
 #if !NETFX_CORE
 namespace HelixToolkit.Wpf.SharpDX
 #else
@@ -24,7 +25,7 @@ namespace HelixToolkit.UWP
 #endif
 {
     using HelixToolkit.Logger;
-    using Model;  
+    using Model;
     using HxAnimations = Animations;
     using HxScene = Model.Scene;
 
@@ -32,202 +33,15 @@ namespace HelixToolkit.UWP
     {
         /// <summary>
         /// </summary>
-        public enum MaterialType
+        public partial class Importer : IDisposable
         {
-            /// <summary>
-            ///     Automatic determine material type
-            /// </summary>
-            Auto,
-
-            /// <summary>
-            ///     The blinn phong
-            /// </summary>
-            BlinnPhong,
-
-            /// <summary>
-            ///     The PBR
-            /// </summary>
-            PBR,
-
-            /// <summary>
-            ///     The diffuse
-            /// </summary>
-            Diffuse,
-
-            /// <summary>
-            ///     The vertex color
-            /// </summary>
-            VertexColor,
-
-            /// <summary>
-            ///     The normal
-            /// </summary>
-            Normal,
-
-            /// <summary>
-            ///     The position
-            /// </summary>
-            Position
-        }
-
-        /// <summary>
-        /// </summary>
-        public class ImporterConfiguration
-        {
-            /// <summary>
-            ///     The ai matkey GLTF basecolor factor for PBR material
-            /// </summary>
-            public string AI_MATKEY_GLTF_BASECOLOR_FACTOR = @"$mat.gltf.pbrMetallicRoughness.baseColorFactor";
-
-            /// <summary>
-            ///     The ai matkey GLTF metallic factor for PBR material
-            /// </summary>
-            public string AI_MATKEY_GLTF_METALLIC_FACTOR = @"$mat.gltf.pbrMetallicRoughness.metallicFactor";
-
-            /// <summary>
-            ///     The ai matkey GLTF metallic, roughness, ambient occlusion texture
-            /// </summary>
-            public string AI_MATKEY_GLTF_METALLICROUGHNESSAO_TEXTURE = @"$tex.file";
-
-            /// <summary>
-            ///     The ai matkey GLTF roughness factor for PBR material
-            /// </summary>
-            public string AI_MATKEY_GLTF_ROUGHNESS_FACTOR = @"$mat.gltf.pbrMetallicRoughness.roughnessFactor";
-
-            /// <summary>
-            ///     The default post process steps for Assimp Importer. <see cref="PostProcessSteps.FlipUVs" /> must be used for
-            ///     DirectX texture sampling
-            /// </summary>
-            public PostProcessSteps AssimpPostProcessSteps =
-                PostProcessSteps.GenerateNormals
-                | PostProcessSteps.Triangulate
-                | PostProcessSteps.TransformUVCoords
-                | PostProcessSteps.CalculateTangentSpace
-                | PostProcessSteps.JoinIdenticalVertices
-                | PostProcessSteps.FindDegenerates
-                | PostProcessSteps.SortByPrimitiveType
-                | PostProcessSteps.RemoveRedundantMaterials
-                | PostProcessSteps.FlipUVs;
-
-            /// <summary>
-            ///     The assimp property configuration
-            /// </summary>
-            public PropertyConfig[] AssimpPropertyConfig = null;
-
-            /// <summary>
-            ///     The cull mode
-            /// </summary>
-            public CullMode CullMode = CullMode.None;
-
-            /// <summary>
-            ///     The enable parallel processing, such as converting Assimp meshes into HelixToolkit meshes
-            /// </summary>
-            public bool EnableParallelProcessing;
-
-            /// <summary>
-            ///     The external context. Can be use to do more customized configuration for Assimp Importer
-            /// </summary>
-            public AssimpContext ExternalContext = null;
-
-            /// <summary>
-            ///     Force cull mode for all imported meshes. Otherwise automatically set cull mode according to the materials.
-            /// </summary>
-            public bool ForceCullMode = false;
-
-            /// <summary>
-            ///     The ignore emissive color
-            /// </summary>
-            public bool IgnoreEmissiveColor = false;
-
-            /// <summary>
-            ///     Force to use material type. Default is Auto
-            /// </summary>
-            public MaterialType ImportMaterialType = MaterialType.Auto;
-            /// <summary>
-            /// Import animations
-            /// </summary>
-            public bool ImportAnimations = true;
-            /// <summary>
-            /// The create skeleton mesh for bone skinning
-            /// </summary>
-            public bool CreateSkeletonForBoneSkinningMesh = false;
-            /// <summary>
-            /// The skeleton material
-            /// </summary>
-            public MaterialCore SkeletonMaterial = new Model.DiffuseMaterialCore() { DiffuseColor = Color.Red };
-            /// <summary>
-            /// The skeleton effects such as xray effects
-            /// </summary>
-            public string SkeletonEffects = "EffectSkeletonGrid";
-            /// <summary>
-            /// The skeleton size scale
-            /// </summary>
-            public float SkeletonSizeScale = 0.1f;
-            /// <summary>
-            /// The adds post effect for skeleton
-            /// </summary>
-            public bool AddsPostEffectForSkeleton = true;
-            /// <summary>
-            /// The flip triangle winding order during import
-            /// </summary>
-            public bool FlipWindingOrder = false;
-
-            private ILogger logger = new DebugLogger();
-            /// <summary>
-            /// Gets or sets the logger.
-            /// </summary>
-            /// <value>
-            /// The logger.
-            /// </value>
-            public ILogger Logger
-            {
-                set
-                {
-                    logger = value;
-                    if (logger == null)
-                    {
-                        logger = new DebugLogger();
-                    }
-                }
-                get { return logger; }
-            }
-            /// <summary>
-            /// The global scale for model
-            /// </summary>
-            public float GlobalScale = 1f;
-            /// <summary>
-            /// The tickes per second. Only used when file does not contains tickes per second for animation.
-            /// </summary>
-            public float TickesPerSecond = 25f;
-            /// <summary>
-            /// Initializes a new instance of the <see cref="ImporterConfiguration"/> class.
-            /// </summary>
-            public ImporterConfiguration()
-            {
-
-            }
-        }
-
-        /// <summary>
-        ///
-        /// </summary>
-        [Flags]
-        public enum ErrorCode
-        {        
-            None = 0,
-            Failed = 1,
-            Succeed = 2,
-            DuplicateNodeName = 4,
-            FileTypeNotSupported = 8,
-            NonUniformAnimationKeyDoesNotSupported = 16
-        }
-
-        /// <summary>
-        /// </summary>
-        public partial class Importer
-        {
-            private const string ToUpperDictString = @"..\";
             private string path = "";
+            public static readonly string[] SupportedTextureFormats = new string[]
+            {
+                "bmp", "jpg", "jpeg", "png", "dds", "tiff", "wmp", "gif",
+            };
+
+            protected static readonly HashSet<string> SupportedTextureFormatDict;
 
             static Importer()
             {
@@ -237,14 +51,19 @@ namespace HelixToolkit.UWP
                 }
 
                 var builder = new StringBuilder();
+                builder.Append($"All Supported |");
                 foreach (var s in SupportedFormats)
                 {
-                    builder.Append("*");
-                    builder.Append(s);
-                    builder.Append(";");
+                    builder.Append($"*{ s };");
+                }
+                builder.Append($"|");
+                foreach (var s in SupportedFormats)
+                {
+                    builder.Append($"(*{ s })|*{ s }|");
                 }
 
-                SupportedFormatsString = builder.ToString();
+                SupportedFormatsString = builder.ToString(0, builder.Length - 1);
+                SupportedTextureFormatDict = new HashSet<string>(SupportedTextureFormats);
             }
             #region Properties
             /// <summary>
@@ -316,6 +135,9 @@ namespace HelixToolkit.UWP
             public ILogger Logger { get => configuration.Logger; }
             #endregion
 
+            private int MaterialIndexForNoName = 0;
+            private int MeshIndexForNoName = 0;
+            private List<EmbeddedTexture> embeddedTextures;
             #region Public Methods
             /// <summary>
             ///     Loads the model specified file path.
@@ -384,6 +206,10 @@ namespace HelixToolkit.UWP
                 scene = null;
                 try
                 {
+                    if (!importer.IsImportFormatSupported(Path.GetExtension(filePath)))
+                    {
+                        return ErrorCode.FileTypeNotSupported | ErrorCode.Failed;
+                    }
                     if (!useExtern && Configuration.AssimpPropertyConfig != null)
                         foreach (var config in Configuration.AssimpPropertyConfig)
                             importer.SetConfig(config);
@@ -400,38 +226,8 @@ namespace HelixToolkit.UWP
                         postProcess |= PostProcessSteps.FlipWindingOrder;
                     }
                     var assimpScene = importer.ImportFile(filePath, postProcess);
-                    if (assimpScene == null)
-                    {
-                        ErrorCode |= ErrorCode.Failed;
-                        return ErrorCode;
-                    }
 
-                    if (!assimpScene.HasMeshes)
-                    {
-                        scene = new HelixToolkitScene(new HxScene.GroupNode());
-                        ErrorCode = ErrorCode.Succeed;
-                        return ErrorCode.Succeed;
-                    }
-
-                    var internalScene = ToHelixScene(assimpScene, Configuration.EnableParallelProcessing);
-                    scene = new HelixToolkitScene(ConstructHelixScene(assimpScene.RootNode, internalScene));
-                    ErrorCode |= ProcessSceneNodes(scene.Root);
-                    if (ErrorCode.HasFlag(ErrorCode.Failed))
-                        return ErrorCode;
-                    if (Configuration.ImportAnimations)
-                    {
-                        LoadAnimations(internalScene);
-                        scene.Animations = Animations.ToArray();
-                        if (Configuration.CreateSkeletonForBoneSkinningMesh
-                            && Configuration.AddsPostEffectForSkeleton)
-                        {
-                            (scene.Root as HxScene.GroupNode).AddChildNode(new HxScene.NodePostEffectXRayGrid()
-                            { EffectName = Configuration.SkeletonEffects });
-                        }
-                    }
-                    if(!ErrorCode.HasFlag(ErrorCode.Failed))
-                        ErrorCode |= ErrorCode.Succeed;
-                    return ErrorCode;
+                    return BuildScene(assimpScene, out scene);
                 }
                 catch (Exception ex)
                 {
@@ -446,6 +242,78 @@ namespace HelixToolkit.UWP
                 }
             }
 
+            /// <summary>
+            /// Loads the specified file stream. User must provider custom texture loader to load texture files.
+            /// </summary>
+            /// <param name="fileStream">The file stream.</param>
+            /// <param name="filePath">The filePath. Used to load texture.</param>
+            /// <param name="formatHint">The format hint.</param>
+            /// <param name="textureLoader">The texture loader</param>
+            /// <param name="scene">The scene.</param>
+            /// <returns></returns>
+            public ErrorCode Load(Stream fileStream, string filePath, string formatHint, out HelixToolkitScene scene, ITextureIO textureLoader = null)
+            {
+                path = filePath;
+                ErrorCode = ErrorCode.None;
+                AssimpContext importer = null;
+                var useExtern = false;
+                if (Configuration.ExternalContext != null)
+                {
+                    importer = Configuration.ExternalContext;
+                    useExtern = true;
+                }
+                else
+                {
+                    importer = new AssimpContext();
+                }
+                configuration.TextureLoader = textureLoader;
+                Clear();
+                scene = null;
+                try
+                {
+                    if (!importer.IsImportFormatSupported(formatHint))
+                    {
+                        return ErrorCode.FileTypeNotSupported | ErrorCode.Failed;
+                    }
+                    if (!useExtern && Configuration.AssimpPropertyConfig != null)
+                        foreach (var config in Configuration.AssimpPropertyConfig)
+                            importer.SetConfig(config);
+                    importer.Scale = configuration.GlobalScale;
+                    var postProcess = configuration.AssimpPostProcessSteps;
+                    if (configuration.FlipWindingOrder)
+                    {
+                        postProcess |= PostProcessSteps.FlipWindingOrder;
+                    }
+                    var assimpScene = importer.ImportFileFromStream(fileStream, postProcess, formatHint);
+                    return BuildScene(assimpScene, out scene);
+                }
+                catch (Exception ex)
+                {
+                    Log(LogLevel.Error, ex.Message);
+                    ErrorCode = ErrorCode.Failed;
+                    return ErrorCode;
+                }
+                finally
+                {
+                    if (!useExtern)
+                        importer.Dispose();
+                }
+            }
+
+            /// <summary>
+            /// Convert the assimp scene to Helix Scene.
+            /// </summary>
+            /// <param name="assimpScene">The assimp scene.</param>
+            /// <param name="filePath">The filePath of the model. It is used for texture loading</param>
+            /// <param name="textureLoader">Custom Texture Loader</param>
+            /// <param name="scene">The scene.</param>
+            /// <returns></returns>
+            public ErrorCode Load(Scene assimpScene, string filePath, out HelixToolkitScene scene, ITextureIO textureLoader = null)
+            {
+                path = filePath;
+                Configuration.TextureLoader = textureLoader;
+                return BuildScene(assimpScene, out scene);
+            }
             #endregion
 
             #region Protected Methods            
@@ -457,6 +325,8 @@ namespace HelixToolkit.UWP
                 textureDict.Clear();
                 SceneNodes.Clear();
                 Animations.Clear();
+                MeshIndexForNoName = 0;
+                MaterialIndexForNoName = 0;
             }
             /// <summary>
             /// Processes the scene nodes.
@@ -473,13 +343,50 @@ namespace HelixToolkit.UWP
             #endregion
 
             #region Private Methods
+            private ErrorCode BuildScene(Scene assimpScene, out HelixToolkitScene scene)
+            {
+                scene = null;
+                if (assimpScene == null)
+                {
+                    ErrorCode |= ErrorCode.Failed;
+                    return ErrorCode;
+                }
+
+                if (!assimpScene.HasMeshes)
+                {
+                    scene = new HelixToolkitScene(new HxScene.GroupNode());
+                    ErrorCode = ErrorCode.Succeed;
+                    return ErrorCode.Succeed;
+                }
+
+                var internalScene = ToHelixScene(assimpScene, Configuration.EnableParallelProcessing);
+                scene = new HelixToolkitScene(ConstructHelixScene(assimpScene.RootNode, internalScene));
+                ErrorCode |= ProcessSceneNodes(scene.Root);
+                if (ErrorCode.HasFlag(ErrorCode.Failed))
+                    return ErrorCode;
+                if (Configuration.ImportAnimations)
+                {
+                    LoadAnimations(internalScene);
+                    scene.Animations = Animations.ToArray();
+                    if (Configuration.CreateSkeletonForBoneSkinningMesh
+                        && Configuration.AddsPostEffectForSkeleton)
+                    {
+                        (scene.Root as HxScene.GroupNode).AddChildNode(new HxScene.NodePostEffectXRayGrid()
+                        { EffectName = Configuration.SkeletonEffects });
+                    }
+                }
+                if (!ErrorCode.HasFlag(ErrorCode.Failed))
+                    ErrorCode |= ErrorCode.Succeed;
+                return ErrorCode;
+            }
+
             private HelixInternalScene ToHelixScene(Scene scene, bool parallel)
             {
                 var s = new HelixInternalScene
                 {
                     AssimpScene = scene,
                     Meshes = new MeshInfo[scene.MeshCount],
-                    Materials = new Tuple<global::Assimp.Material, MaterialCore>[scene.MaterialCount]
+                    Materials = new KeyValuePair<global::Assimp.Material, MaterialCore>[scene.MaterialCount]
                 };
                 Parallel.Invoke(() =>
                     {
@@ -488,13 +395,13 @@ namespace HelixToolkit.UWP
                             if (parallel)
                             {
                                 Parallel.ForEach(scene.Meshes,
-                                        (mesh, state, index) => { s.Meshes[index] = ToHelixGeometry(mesh); });
+                                        (mesh, state, index) => { s.Meshes[index] = OnCreateHelixGeometry(mesh); });
                             }
                             else
                             {
                                 for (var i = 0; i < scene.MeshCount; ++i)
                                 {
-                                    s.Meshes[i] = ToHelixGeometry(scene.Meshes[i]);
+                                    s.Meshes[i] = OnCreateHelixGeometry(scene.Meshes[i]);
                                 }
                             }
                         }
@@ -503,10 +410,12 @@ namespace HelixToolkit.UWP
                     {
                         if (scene.HasMaterials)
                         {
+                            embeddedTextures = scene.HasTextures ? scene.Textures : new List<EmbeddedTexture>();
                             for (var i = 0; i < scene.MaterialCount; ++i)
                             {
-                                s.Materials[i] = ToHelixMaterial(scene.Materials[i]);
+                                s.Materials[i] = OnCreateHelixMaterial(scene.Materials[i]);
                             }
+                            embeddedTextures = null;
                         }
                     });
                 return s;
@@ -517,7 +426,7 @@ namespace HelixToolkit.UWP
                 var group = new HxScene.GroupNode
                 {
                     Name = string.IsNullOrEmpty(node.Name) ? nameof(HxScene.GroupNode) : node.Name,
-                    ModelMatrix = node.Transform.ToSharpDXMatrix()
+                    ModelMatrix = node.Transform.ToSharpDXMatrix(configuration.IsSourceMatrixColumnMajor)
                 };
                 if (node.HasChildren)
                 {
@@ -531,7 +440,7 @@ namespace HelixToolkit.UWP
                     foreach (var idx in node.MeshIndices)
                     {
                         var mesh = scene.Meshes[idx];
-                        var hxNode = ToHxMeshNode(mesh, scene, Matrix.Identity);
+                        var hxNode = OnCreateHxMeshNode(mesh, scene, Matrix.Identity);
                         group.AddChildNode(hxNode);
                         if(hxNode is HxScene.BoneSkinMeshNode skinNode && Configuration.CreateSkeletonForBoneSkinningMesh)
                         {
@@ -556,6 +465,8 @@ namespace HelixToolkit.UWP
             {
                 Logger.Log(level, msg, nameof(EffectsManager), caller, sourceLineNumber);
             }
+
+
             #endregion
 
             #region Inner Classes
@@ -577,14 +488,49 @@ namespace HelixToolkit.UWP
                 /// <summary>
                 ///     The materials
                 /// </summary>
-                public Tuple<global::Assimp.Material, MaterialCore>[] Materials;
+                public KeyValuePair<global::Assimp.Material, MaterialCore>[] Materials;
 
                 /// <summary>
                 ///     The meshes
                 /// </summary>
                 public MeshInfo[] Meshes;
             }
+            #endregion
 
+            #region IDisposable Support
+            private bool disposedValue = false; // To detect redundant calls
+
+            protected virtual void Dispose(bool disposing)
+            {
+                if (!disposedValue)
+                {
+                    if (disposing)
+                    {
+                        // TODO: dispose managed state (managed objects).
+                        Clear();
+                    }
+
+                    // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
+                    // TODO: set large fields to null.
+
+                    disposedValue = true;
+                }
+            }
+
+            // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
+            // ~Importer() {
+            //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            //   Dispose(false);
+            // }
+
+            // This code added to correctly implement the disposable pattern.
+            public void Dispose()
+            {
+                // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+                Dispose(true);
+                // TODO: uncomment the following line if the finalizer is overridden above.
+                // GC.SuppressFinalize(this);
+            }
             #endregion
         }
     }

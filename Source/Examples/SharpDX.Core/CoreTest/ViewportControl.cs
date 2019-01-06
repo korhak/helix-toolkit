@@ -1,4 +1,5 @@
-﻿using HelixToolkit.SharpDX.Core.Animations;
+﻿using HelixToolkit.SharpDX.Core;
+using HelixToolkit.SharpDX.Core.Animations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,6 +15,7 @@ namespace CoreTest
         public bool EnableSSAO;
         public bool EnableFXAA;
         public bool EnableFrustum;
+        public bool ShowRenderDetail;
         public System.Numerics.Vector3 BackgroundColor;
         public float DirectionLightIntensity;
         public float AmbientLightIntensity;
@@ -21,5 +23,7 @@ namespace CoreTest
         public bool ShowWireframeChanged;
         public bool PlayAnimation;
         public IAnimationUpdater AnimationUpdater;
+        public IViewport3DX Viewport;
+        public bool ShowEnvironmentMap;
     }
 }
